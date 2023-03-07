@@ -90,5 +90,5 @@ if debug_plots
    title('nias mesh')
 end
 
-disp('saving ./models/gris_mesh.mat')
-save models/gris_mesh.mat md;
+disp('saving ./models/gris.mesh.mat')
+save models/gris.mesh.mat md;

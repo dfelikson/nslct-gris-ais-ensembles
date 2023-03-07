@@ -1,4 +1,4 @@
-md = loadmodel('./models/gris_param.mat');
+md = loadmodel('./models/gris.param.mat');
 
 fprintf(['\n\033[33m   Basal friction \033[0m \n\n']);
 disp('   Initialize basal friction using driving stress');
@@ -83,5 +83,5 @@ md.settings.waitonlock=0; % Model results must be loaded manually with md=loadre
 
 md=solve(md,'sb');
 
-save ./models/gris.control_drag.ssa.sb md;
+save ./models/gris.inversion.ssa.sb.mat md;
 
