@@ -67,11 +67,11 @@ mask = interpBedmachineGreenland(md.mesh.x,md.mesh.y,'mask');
 %pos = find(mask <= 1 | mask == 4);
 pos = find(mask < 1 | (md.mask.ice_levelset == -1 & md.mesh.vertexonboundary));
 md.mask.ice_levelset(pos) = 1;
-md.mask.ocean_levelset(mask==0) = -1;
-
-%md = setmask(md,'',''); % empty arguements denotes that all ice is everywhere and grounded
 % Assign floating ice in grounded ice mask
-md.mask.ocean_levelset(posfloat) = -1;
+baf = md.geometry.surface-1/(1-di)*md.geometry.surface;
+posfloat = (baf-md.geometry.bed)>0; % find floating areas using di
+pos = find(mask==0 | posfloat);
+md.mask.ocean_levelset(pos) = -1;
 
 md.mask.ice_levelset   = reinitializelevelset(md, md.mask.ice_levelset);
 md.mask.ocean_levelset = reinitializelevelset(md, md.mask.ocean_levelset);
