@@ -37,11 +37,9 @@ md.friction.coefficient(pos1) = 1;
 pos=find(isnan(md.friction.coefficient));
 md.friction.coefficient(pos)  = 1;
 
-save ./models/gris_init.mat md;
-
 % Control general
 md.inversion.iscontrol=1;
-md.inversion.maxsteps=20;   %%%% increase? in Helenes code nsteps=300
+md.inversion.maxsteps=100;   %%%% increase? in Helenes code nsteps=300
 md.inversion.maxiter=40;
 md.inversion.dxmin=0.1;
 md.inversion.gttol=0.0001;
@@ -78,7 +76,7 @@ md.cluster = load_cluster('oibserve');
 md.miscellaneous.name='gris_ssa_sbinv';
 md.cluster.interactive=0; %runs in background on cluster (adds & to end of *.queue)
 md.toolkits=toolkits;
-md.verbose=verbose('solution',true,'control',true,'convergence',true);
+md.verbose=verbose('control',true);
 md.settings.waitonlock=0; % Model results must be loaded manually with md=loadresultsfromcluster(md);
 
 md=solve(md,'sb');

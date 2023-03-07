@@ -131,8 +131,10 @@ disp('   Interpolating climate data');
 md.smb.mass_balance=InterpFromGridToMesh(x3,y3,smb,md.mesh.x,md.mesh.y,0);
 md.smb.mass_balance=(md.smb.mass_balance*md.materials.rho_freshwater/md.materials.rho_ice)/1000; %to get m/yr ice equivalent
 %md.initialization.temperature=InterpFromMeshToMesh2d(index,x4(:),y4(:),tskin(:),md.mesh.x,md.mesh.y);
-fprintf([yellow_highlight_start, 'WARNING:' yellow_highlight_end ' Using -5 deg C for ice temperature!\n'])
-md.initialization.temperature = -5 * ones(md.mesh.numberofvertices,1) + 273.15;
+
+ice_temp = -10;
+fprintf([yellow_highlight_start, 'WARNING:' yellow_highlight_end ' Using ' num2str(ice_temp) ' deg C for ice temperature!\n'])
+md.initialization.temperature = ice_temp * ones(md.mesh.numberofvertices,1) + 273.15;
 clear x3 y3 smb lat lon x4 y4 index tskin;
 
 
