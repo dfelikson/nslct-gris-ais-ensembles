@@ -81,5 +81,5 @@ md.settings.waitonlock=0; % Model results must be loaded manually with md=loadre
 
 md=solve(md,'sb');
 
-save ./models/gris.inversion.ssa.sb.mat md;
+save(['./models/ice_temperature_HO/gris.inversion.' ensembleID '.ssa.sb.mat'], 'md');
 

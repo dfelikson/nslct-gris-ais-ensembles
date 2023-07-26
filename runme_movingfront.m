@@ -1,5 +1,24 @@
 % Load model
-md = loadmodel('./models/gris.inversion.ssa.sb');
+md = loadmodel(['./models/ice_temperature_HO/gris.relaxation.' ensembleID '.ssa.tr']);
+ 
+% Select the starting point from the relaxation
+%relaxation_start_yr = 20; % 5 | 10 | 15 | 20
+relaxation_start_yr = evalin('base','relaxation_start_yr');
+fprintf([yellow_highlight_start 'Using relaxation start year: %3.0f' yellow_highlight_end '\n'], relaxation_start_yr);
+pos = find([md.results.TransientSolution(:).time] == relaxation_start_yr);
+if isempty(pos)
+   fprintf('Could not find an entry for start yr %5.2f from relaxation! Exiting.\n', relaxation_start_yr)
+   return
+end
+md = transientrestart(md, pos);
+results = rmfield(md.results, 'TransientSolution3');
+md.results = results;
+
+% Start and end time setup
+md.timestepping.time_step=0.05;%0.01; % need to adjust for CFL
+md.timestepping.start_time=2007; %years
+md.timestepping.final_time=2016; %years
+md.settings.output_frequency=4; % output every Nth timestep
 
 % Frontal forcings -- basic tests that are commented out %%{{{
 % Frontal forcings -- basic test of frontalforcings
@@ -23,22 +42,45 @@ md = loadmodel('./models/gris.inversion.ssa.sb');
 %md.calving.calvingrate(pos) = 10000; %5 * md.initialization.vel; % * ones(md.mesh.numberofvertices,1) * 365.25; % 5 m/day converted to m/year
 %%}}}
 
+if false
 % Slater and Straneo (2022) frontal forcings
 [md_basins, twglaciers] = parameterize_slater_straneo_submelt(md);
-submelt_source = 'ORAS5';
-md.frontalforcings.meltingrate = 0 * ones(md.mesh.numberofvertices+1,length(twglaciers(1).submelt.t));
-md.frontalforcings.meltingrate(end,:) = twglaciers(1).submelt.t;
+idx_start = find(twglaciers(1).submelt.t >= md.timestepping.start_time, 1, 'first');
+idx_final = find(twglaciers(1).submelt.t <= md.timestepping.final_time, 1, 'last');
+ocean_forcing = evalin('base', 'ocean_forcing');
+fprintf([yellow_highlight_start 'Using ocean forcing: %s' yellow_highlight_end '\n'], ocean_forcing);
+md.frontalforcings.meltingrate = 0 * ones(md.mesh.numberofvertices+1,length(twglaciers(1).submelt.t(idx_start:idx_final)));
+md.frontalforcings.meltingrate(end,:) = twglaciers(1).submelt.t(idx_start:idx_final);
 for i_twg = 1:numel(twglaciers)
-   submelt = eval(['twglaciers(i_twg).submelt.m_' submelt_source]);
+   submelt = eval(['twglaciers(i_twg).submelt.m_' ocean_forcing]);
    pos = find(md_basins == twglaciers(i_twg).basin_num);
-   md.frontalforcings.meltingrate(pos,:) = repmat(submelt, length(pos), 1) * 365.25;
+   md.frontalforcings.meltingrate(pos,:) = repmat(submelt(idx_start:idx_final), length(pos), 1) * 365.25;
+   if any(isnan(md.frontalforcings.meltingrate(pos,:)))
+      fprintf('WARNING: NaNs in meltingrate for twglacier idx %d (%s, morlighem_number %d, basin %d)\n', i_twg, twglaciers(i_twg).name, twglaciers(i_twg).morlighem_number, twglaciers(i_twg).basin_num);
+   end
 end
 pos = find(md.geometry.bed > 0 );
 md.frontalforcings.meltingrate(pos,:) = 0;
+end
+md.frontalforcings.meltingrate = frontalforcings_meltingrate;
 
 % Calving
-md.calving = calvingvonmises();
-md.calving.stress_threshold_groundedice = 1e6;
+calving = evalin('base','calving');
+fprintf([yellow_highlight_start 'Using calving: %s' yellow_highlight_end '\n'], calving);
+switch calving
+   case 'VM'
+     sigma_max = evalin('base', 'sigma_max');
+     fprintf([yellow_highlight_start 'Using sigma_max: %f' yellow_highlight_end '\n'], sigma_max);
+     md.calving = calvingvonmises();
+     md.calving.stress_threshold_groundedice = sigma_max;
+     %md.calving.stress_threshold_floatingice = 5e5;
+   case 'CD'
+     water_height = evalin('base', 'water_height');
+     fprintf([yellow_highlight_start 'Using water_height: %f' yellow_highlight_end '\n'], water_height);
+     md.calving = calvingcrevassedepth();
+     md.calving.crevasse_opening_stress = 0;
+     md.calving.water_height = water_height * ones(md.mesh.numberofvertices,1);
+end
 
 md.levelset.spclevelset = nan * ones(md.mesh.numberofvertices,1);
 %pos = find(md.geometry.bed < 0 & md.mesh.vertexonboundary);
@@ -65,35 +107,21 @@ md.transient.isoceancoupling=0;
 %md.transient.iscoupler=0;
 
 md.groundingline.migration='SubelementMigration';
-   
-md.timestepping.time_step=0.05;%0.01; % need to adjust for CFL
-md.timestepping.start_time=2007; %years
-md.timestepping.final_time=2016; %years
-md.settings.output_frequency=4; % output every Nth timestep
-
+ 
 md.verbose = verbose('solution', true);
 md.transient.requested_outputs = {'default', 'IceVolumeAboveFloatation', 'CalvingFluxLevelset', 'SigmaVM', 'CalvingMeltingrate', 'CalvingCalvingrate'}; %, 'CalvingAblationrate'};
 
 % Solve
-md.cluster = load_cluster('oibserve');
-md.cluster.np = 28;
-md.cluster.interactive = 0;
+md.mischellaneous.name = 'gris_ssa_tr';
+%md.cluster = load_cluster('oibserve');
+%md.cluster.interactive = 0;
+md.cluster = load_cluster('discover');
 md.settings.waitonlock = 0; 9999;
 md.toolkits = toolkits;
 md = solve(md, 'tr');
 
 % Save the model that was sent to the cluster
-filename = './models/gris.movingfront.ssa.tr.sent2cluster';
-fprintf(['saving ' filename '\n']);
-save(filename, 'md', '-v7.3');
-return
-
-% Load results from cluster
-md = loadmodel(filename);
-md = loadresultsfromcluster(md);
-
-% Save model with results
-filename = './models/gris.movingfront.ssa.tr';
+filename = ['./models/ice_temperature_HO/gris.movingfront.' ensembleID '.ssa.tr.sent2cluster'];
 fprintf(['saving ' filename '\n']);
 save(filename, 'md', '-v7.3');
 

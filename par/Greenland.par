@@ -65,7 +65,7 @@ md.mask.ocean_levelset       = +1*ones(md.mesh.numberofvertices,1);
 mask = interpBedmachineGreenland(md.mesh.x,md.mesh.y,'mask');
 % 0 = ocean, 1 = ice-free land, 2 = grounded ice, 3 = floating ice, 4 = non-Greenland land
 %pos = find(mask <= 1 | mask == 4);
-pos = find(mask < 1 | (md.mask.ice_levelset == -1 & md.mesh.vertexonboundary));
+pos = find(mask <= 1 | (md.mask.ice_levelset == -1 & md.mesh.vertexonboundary));
 md.mask.ice_levelset(pos) = 1;
 % Assign floating ice in grounded ice mask
 baf = md.geometry.surface-1/(1-di)*md.geometry.surface;
@@ -73,6 +73,7 @@ posfloat = (baf-md.geometry.bed)>0; % find floating areas using di
 pos = find(mask==0 | posfloat);
 md.mask.ocean_levelset(pos) = -1;
 
+disp('    -> reinitializing levelsets')
 md.mask.ice_levelset   = reinitializelevelset(md, md.mask.ice_levelset);
 md.mask.ocean_levelset = reinitializelevelset(md, md.mask.ocean_levelset);
 
@@ -132,11 +133,21 @@ md.smb.mass_balance=InterpFromGridToMesh(x3,y3,smb,md.mesh.x,md.mesh.y,0);
 md.smb.mass_balance=(md.smb.mass_balance*md.materials.rho_freshwater/md.materials.rho_ice)/1000; %to get m/yr ice equivalent
 %md.initialization.temperature=InterpFromMeshToMesh2d(index,x4(:),y4(:),tskin(:),md.mesh.x,md.mesh.y);
 
-ice_temp = -10;
-fprintf([yellow_highlight_start, 'WARNING:' yellow_highlight_end ' Using ' num2str(ice_temp) ' deg C for ice temperature!\n'])
-md.initialization.temperature = ice_temp * ones(md.mesh.numberofvertices,1) + 273.15;
+%ice_temp = evalin('base', 'ice_temp');
+%fprintf([yellow_highlight_start, 'WARNING:' yellow_highlight_end ' Using ' num2str(ice_temp) ' deg C for ice temperature!\n'])
+%md.initialization.temperature = ice_temp * ones(md.mesh.numberofvertices,1) + 273.15;
 clear x3 y3 smb lat lon x4 y4 index tskin;
 
+% load in parameterized model
+disp('   Using HO temperature for initializing rheology');
+md3d = loadmodel('./models/ISMIP6Greenland_Thermal.mat');
+
+% depth average the temperature from the HO model
+initialization_temperature_depthavg = DepthAverage(md3d, md3d.initialization.temperature);
+
+% interpolate depth-averaged temperature from the HO model to the SSA model
+initialization_temperature_depthavg_interp =InterpFromMeshToMesh2d(md3d.mesh.elements2d, md3d.mesh.x2d, md3d.mesh.y2d, initialization_temperature_depthavg, md.mesh.x, md.mesh.y);
+md.initialization.temperature = initialization_temperature_depthavg_interp;
 
 % % GHF data
 % disp('   Loading GHF data -- Martos et al 2018');
@@ -180,6 +191,9 @@ disp('   Construct ice rheological properties');
 md.materials.rheology_n=3*ones(md.mesh.numberofelements,1);
 %md.materials.rheology_B=paterson(md.initialization.temperature); %initial guess of temperature comes from surface temperature
 md.materials.rheology_B=cuffey(md.initialization.temperature);
+rheology = evalin('base','rheology');
+fprintf([yellow_highlight_start '      -> adjusting rheology by %+3.1f%%' yellow_highlight_end '\n'], rheology);
+md.materials.rheology_B = (1+rheology/100) .* md.materials.rheology_B;
 
 disp('   Set other boundary conditions');
 md=SetMarineIceSheetBC(md);
