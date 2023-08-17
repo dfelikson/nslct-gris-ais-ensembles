@@ -7,3 +7,6 @@ Trial 1:
 - cost_function_coefficients same as Nias
 - md.friction.coupling = 0
 
+Trial 2:
+- ice temperature from Choi (HO run)
+
