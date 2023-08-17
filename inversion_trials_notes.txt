@@ -1,0 +1,9 @@
+Trial 1:
+- ice temperature from Nias
+- initial guess (md.friction.coefficient) from Nias
+- dirichlet BCs on land-terminating ice (v = v_obs)
+- neumann BCs on ocean-terminating ice
+
+- cost_function_coefficients same as Nias
+- md.friction.coupling = 0
+
