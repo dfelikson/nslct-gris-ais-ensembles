@@ -1,8 +1,8 @@
 h = figure;
-plotmodel(md, 'data', md.results.StressbalanceSolution.FrictionCoefficient-md.friction.coefficient, 'mask#all', md.mask.ice_levelset<0, 'caxis', [-25 25], 'figure', h.Num)
+plotmodel(md, 'data', md.results.StressbalanceSolution.FrictionCoefficient-md.friction.coefficient, 'mask#all', md.mask.ice_levelset<0, 'caxis', [-25 25], 'figure', h.Number)
 
 h = figure;
-plotmodel(md, 'data', md.results.StressbalanceSolution.Vel-md.inversion.vel_obs, 'mask#all', md.mask.ice_levelset<0, 'caxis', [-25 25], 'figure', h.Number)
+plotmodel(md, 'data', md.results.StressbalanceSolution.Vel-md.inversion.vel_obs, 'mask#all', md.mask.ice_levelset<0, 'caxis', [-500 500], 'figure', h.Number)
 
 pos = find(md.inversion.vel_obs > 500);
 figure;
