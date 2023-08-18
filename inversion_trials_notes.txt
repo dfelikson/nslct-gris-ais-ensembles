@@ -10,3 +10,6 @@ Trial 1:
 Trial 2:
 - ice temperature from Choi (HO run)
 
+Trial 3:
+- neumann BCs everywhere (ocean- and land-terminating ice)
+
