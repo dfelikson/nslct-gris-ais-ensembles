@@ -13,3 +13,6 @@ Trial 2:
 Trial 3:
 - neumann BCs everywhere (ocean- and land-terminating ice)
 
+Trial 4:
+- Initial guess ... md.friction.coefficient = 30
+
