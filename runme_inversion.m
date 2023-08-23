@@ -1,41 +1,7 @@
-md = loadmodel('./models/gris.param.mat');
+md = loadmodel(['./models/ice_temperature_HO/gris.param.' ensembleID '.mat']);
 
-fprintf(['\n\033[33m   Basal friction \033[0m \n\n']);
-disp('   Initialize basal friction using driving stress');
-disp('      -- Compute surface slopes and use 10 L2 projections');
-[sx,sy,s]=slope(md); sslope=averaging(md,s,10);
-disp('      -- Process surface velocity data');
-vel = md.inversion.vel_obs;
-flags=(vel==0); pos1=find(flags); pos2=find(~flags);
-vel(pos1) = griddata(md.mesh.x(pos2),md.mesh.y(pos2),vel(pos2),md.mesh.x(pos1),md.mesh.y(pos1));
-%velmax = max(vel);
-%vel(vel==0 & md.mask.ice_levelset<0) = velmax;
-disp('      -- Filling in missing ice velocity with MEaSUREs mosaic');
-[velx, vely] = interpJoughinCompositeGreenland(md.mesh.x,md.mesh.y);
-vel = sqrt( velx.^2 + vely.^2 );
-idx = md.mask.ice_levelset < 0 & isnan(vel);
-vel(idx) = sqrt( velx(idx).^2 + vely(idx).^2 );
-vel=max(vel,0.1);
-disp('      -- Calculate effective pressure');
-Neff = md.materials.rho_ice*md.geometry.thickness+md.materials.rho_water*md.geometry.base;
-Neff(find(Neff<=0))=1;
-% -- NOTE --
-Neff=max(Neff,5e4);
-pos1 = find(Neff==5e4 & vel <100 & md.mask.ice_levelset<0);
-pos2 = find(Neff >5e4 & vel>=100 & md.mask.ice_levelset<0);
-vel(pos1) = griddata(md.mesh.x(pos2),md.mesh.y(pos2),vel(pos2),md.mesh.x(pos1),md.mesh.y(pos1),'nearest');
-% -- NOTE --
-disp('      -- Deduce friction coefficient');
-md.friction.coefficient=sqrt(md.materials.rho_ice*md.geometry.thickness.*(sslope)./(Neff.*vel/md.constants.yts));
-md.friction.coefficient=min(md.friction.coefficient,200);
-md.friction.p = 1.0 * ones(md.mesh.numberofelements,1);
-md.friction.q = 1.0 * ones(md.mesh.numberofelements,1);
-disp('      -- Extrapolate on ice free and floating ice regions');
-flags=(md.mask.ice_levelset>0) | (md.mask.ice_levelset<0 & md.mask.ocean_levelset<0); pos1=find(flags); pos2=find(~flags);
-%md.friction.coefficient(pos1) = griddata(md.mesh.x(pos2),md.mesh.y(pos2),md.friction.coefficient(pos2),md.mesh.x(pos1),md.mesh.y(pos1),'natural');
-md.friction.coefficient(pos1) = 1;
-pos=find(isnan(md.friction.coefficient));
-md.friction.coefficient(pos)  = 1;
+md_nias = loadmodel('models/nias_ensemble_setup/gris.cmmtt.control_drag.ssa.sb');
+md.friction.coefficient = InterpFromMeshToMesh2d(md_nias.mesh.elements, md_nias.mesh.x, md_nias.mesh.y, md_nias.friction.coefficient, md.mesh.x, md.mesh.y);
 
 % Control general
 md.inversion.iscontrol=1;
@@ -64,8 +30,15 @@ md.inversion.max_parameters=200*ones(md.mesh.numberofvertices,1);
 
 % Additional parameters
 % % For stress balance
-md.stressbalance.restol=0.01; md.stressbalance.reltol=0.1;
+md.stressbalance.restol=0.01;
+md.stressbalance.reltol=0.1;
 md.stressbalance.abstol=NaN;
+
+md.friction.coupling = 0;
+%pos = sum(md.mask.ice_levelset(md.mesh.elements)<0.,2)>0 & sum(md.mask.ice_levelset(md.mesh.elements)>0.,2)>0 & sum(md.geometry.bed(md.mesh.elements)>0.,2);
+%pos = md.mesh.elements(pos,:);
+%md.stressbalance.spcvx(pos)=md.inversion.vx_obs(pos);
+%md.stressbalance.spcvy(pos)=md.inversion.vy_obs(pos);
 
 % Go solve
 %md.cluster=load_cluster('discover');
@@ -77,7 +50,7 @@ md.miscellaneous.name='gris_ssa_sbinv';
 md.cluster.interactive=0; %runs in background on cluster (adds & to end of *.queue)
 md.toolkits=toolkits;
 md.verbose=verbose('control',true);
-md.settings.waitonlock=0; % Model results must be loaded manually with md=loadresultsfromcluster(md);
+md.settings.waitonlock=NaN; % Model results must be loaded manually with md=loadresultsfromcluster(md);
 
 md=solve(md,'sb');
 
