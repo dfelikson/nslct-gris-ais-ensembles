@@ -120,7 +120,7 @@ x3    = ncread(ncrunoff,'lon'); % despite name in netcdf, it isn't actually lat 
 y3    = ncread(ncrunoff,'lat');
 smb   = (sum(ncread(ncsmb,'SMB_rec',[1 1 25],[Inf Inf 360]),3)/30)'; %30 years from Jan 1960 - Dec 1989
 
-disp('   Loading climate data -- surface temperatures');
+%disp('   Loading climate data -- surface temperatures');
 %nctemp=datalocs('temp');
 %tskin = (sum(ncread(nctemp,'tskin',[1 1 1 25],[Inf Inf 1 360]),4)/(30*12))'; %30 years from Jan 1960 - Dec 1989
 %lat = ncread(nctemp,'lat')';        % not sure what the projection is for these data
@@ -138,16 +138,8 @@ md.smb.mass_balance=(md.smb.mass_balance*md.materials.rho_freshwater/md.material
 %md.initialization.temperature = ice_temp * ones(md.mesh.numberofvertices,1) + 273.15;
 clear x3 y3 smb lat lon x4 y4 index tskin;
 
-% load in parameterized model
-disp('   Using HO temperature for initializing rheology');
-md3d = loadmodel('./models/ISMIP6Greenland_Thermal.mat');
-
-% depth average the temperature from the HO model
-initialization_temperature_depthavg = DepthAverage(md3d, md3d.initialization.temperature);
-
-% interpolate depth-averaged temperature from the HO model to the SSA model
-initialization_temperature_depthavg_interp =InterpFromMeshToMesh2d(md3d.mesh.elements2d, md3d.mesh.x2d, md3d.mesh.y2d, initialization_temperature_depthavg, md.mesh.x, md.mesh.y);
-md.initialization.temperature = initialization_temperature_depthavg_interp;
+md_nias = loadmodel('models/nias_ensemble_setup/gris.cmmtt.control_drag.ssa.sb');
+md.initialization.temperature = InterpFromMeshToMesh2d(md_nias.mesh.elements, md_nias.mesh.x, md_nias.mesh.y, md_nias.initialization.temperature, md.mesh.x, md.mesh.y);
 
 % % GHF data
 % disp('   Loading GHF data -- Martos et al 2018');
@@ -191,25 +183,48 @@ disp('   Construct ice rheological properties');
 md.materials.rheology_n=3*ones(md.mesh.numberofelements,1);
 %md.materials.rheology_B=paterson(md.initialization.temperature); %initial guess of temperature comes from surface temperature
 md.materials.rheology_B=cuffey(md.initialization.temperature);
-rheology = evalin('base','rheology');
-fprintf([yellow_highlight_start '      -> adjusting rheology by %+3.1f%%' yellow_highlight_end '\n'], rheology);
-md.materials.rheology_B = (1+rheology/100) .* md.materials.rheology_B;
-
-disp('   Set other boundary conditions');
-md=SetMarineIceSheetBC(md);
-%md.mask.ice_levelset(md.mesh.vertexonboundary==1)=0;
-md.basalforcings.floatingice_melting_rate = zeros(md.mesh.numberofvertices,1);
-md.basalforcings.groundedice_melting_rate = zeros(md.mesh.numberofvertices,1);
-md.thermal.spctemperature = [md.initialization.temperature;1]; %impose observed temperature on surface
-md.masstransport.spcthickness = NaN*ones(md.mesh.numberofvertices,1);
 
 disp('   Set Pressure');
 md.initialization.pressure=md.materials.rho_ice*md.constants.g*md.geometry.thickness;
 
+disp('   Set other boundary conditions');
+md.basalforcings.floatingice_melting_rate = zeros(md.mesh.numberofvertices,1);
+md.basalforcings.groundedice_melting_rate = zeros(md.mesh.numberofvertices,1);
+md.thermal.spctemperature = [md.initialization.temperature;1]; %impose observed temperature on surface
+md.masstransport.spcthickness = NaN*ones(md.mesh.numberofvertices,1);
+   
+ocean_elements = sum(md.mask.ocean_levelset(md.mesh.elements)<0.,2) >0.;
+ice_elements   = sum(md.mask.ice_levelset(md.mesh.elements)<0.,2) >0.;
+
+type_elements = nan * ones(length(ice_elements),1);
+type_elements(~ice_elements &  ocean_elements) = 0; % ocean
+type_elements( ice_elements & ~ocean_elements) = 1; % grounded ice
+type_elements( ice_elements &  ocean_elements) = 2; % floating ice
+type_elements(~ice_elements & ~ocean_elements) = 3; % rock
+
+% Find elements that are connected to one another
+% grounded <-> rock
+md.mesh.vertexconnectivity=NodeConnectivity(md.mesh.elements,md.mesh.numberofvertices);
+md.mesh.elementconnectivity=ElementConnectivity(md.mesh.elements,md.mesh.vertexconnectivity);
+
+pos_element = zeros(md.mesh.numberofelements,1);
+for i = 1:size(md.mesh.elementconnectivity,1)
+   elementconnectivity = md.mesh.elementconnectivity(i,:);
+   elementconnectivity(elementconnectivity==0) = [];
+   if any(type_elements(elementconnectivity,:) == 1) & any(type_elements(elementconnectivity,:)==3)
+      pos_element(i) = 1;
+   end
+end
+pos_vertex = unique(md.mesh.elements(find(pos_element),:));
+
 disp('   Single point constraints');
-%Initialize single point constraint arrays
+md.stressbalance.spcvx=NaN*ones(md.mesh.numberofvertices,1);
+md.stressbalance.spcvy=NaN*ones(md.mesh.numberofvertices,1);
+md.stressbalance.spcvz=NaN*ones(md.mesh.numberofvertices,1);
+
+md.stressbalance.spcvx(pos_vertex,1)=md.inversion.vx_obs(pos_vertex,1);
+md.stressbalance.spcvy(pos_vertex,1)=md.inversion.vy_obs(pos_vertex,1);
+md.stressbalance.spcvz(pos_vertex,1)=0;
 md.stressbalance.referential=NaN*ones(md.mesh.numberofvertices,6);
-md.stressbalance.spcvx = NaN*ones(md.mesh.numberofvertices,1);
-md.stressbalance.spcvy = NaN*ones(md.mesh.numberofvertices,1);
-md.stressbalance.spcvz = NaN*ones(md.mesh.numberofvertices,1);
+md.stressbalance.loadingforce=0*ones(md.mesh.numberofvertices,3);
 
