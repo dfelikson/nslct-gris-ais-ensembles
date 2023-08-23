@@ -62,5 +62,5 @@ md.settings.waitonlock=NaN; % Model results must be loaded manually with md=load
 
 md=solve(md,'sb');
 
-save(['./models/inversion_trials/gris.inversion.trial3.ssa.sb.mat'], 'md');
+save(['./models/inversion_trials/gris.inversion.trial4.ssa.sb.mat'], 'md');
 
