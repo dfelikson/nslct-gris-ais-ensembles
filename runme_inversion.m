@@ -1,4 +1,4 @@
-md = loadmodel(['./models/ice_temperature_HO/gris.param.trial1.mat']);
+md = loadmodel(['./models/ice_temperature_HO/gris.param.' ensembleID '.mat']);
 
 md_nias = loadmodel('models/nias_ensemble_setup/gris.cmmtt.control_drag.ssa.sb');
 md.friction.coefficient = InterpFromMeshToMesh2d(md_nias.mesh.elements, md_nias.mesh.x, md_nias.mesh.y, md_nias.friction.coefficient, md.mesh.x, md.mesh.y);
