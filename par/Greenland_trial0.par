@@ -1,0 +1,212 @@
+% April 2019
+% Initialises:
+%       Geometry
+%       M1QN3 fields and initial velocity
+%       Climatology
+%       GHF
+%       Basal friction
+%       Ice rheology
+%       Other boundary conditions
+
+% Coordinate system
+md.mesh.epsg=3413;
+
+% Geometry data
+
+disp('   Loading geometry data from BedMachine-v3 NetCDF');
+% (Note: You can use ncdisp('file') to see an ncdump)
+%ncgeometry=datalocs('geometry');
+ncgeometry = '/Users/dfelikso/Research/Data/GreenlandBed/MCbed/BedMachineGreenland-2017-09-20/BedMachineGreenland-2017-09-20.nc';
+x1    = double(ncread(ncgeometry,'x'));
+y1    = flipud(double(ncread(ncgeometry,'y')));
+usrf  = flipud(double(ncread(ncgeometry,'surface')'));
+topg  = flipud(ncread(ncgeometry,'bed')');
+thck  = flipud(double(ncread(ncgeometry,'thickness')'));
+lsrf  = usrf - thck; 
+
+disp('   Interpolating geometry');
+md.geometry.bed     = InterpFromGridToMesh(x1,y1,topg,md.mesh.x,md.mesh.y,0);
+md.geometry.surface = InterpFromGridToMesh(x1,y1,usrf,md.mesh.x,md.mesh.y,0);
+md.geometry.base = InterpFromGridToMesh(x1,y1,lsrf,md.mesh.x,md.mesh.y,0);
+clear x1 y1 topg usrf lsrf thck;
+
+disp('  Construct thickness');
+md.geometry.thickness=md.geometry.surface-md.geometry.base;
+% Set min thickness to 1 meter
+pos0=find(md.geometry.thickness<=0);
+md.geometry.thickness(pos0)=1;
+md.geometry.surface=md.geometry.thickness+md.geometry.base; % this will ultimately lead to a minimum floating thickness of ~10m
+
+disp('  Ensure hydrostatic equilibrium of ice shelves');
+basetopgdiff = md.geometry.base - md.geometry.bed;
+% if basetopgdiff > 0 : floating, set thickness to hydrostatic equilibrium given surface, and recalculate base from surface-thickness
+% if basetopgdiff == 0 : grounded, leave thickness as it is
+% if basetopgdiff < 0 : interpolation error, set base to topg and recalculate thickness from surface-base
+%                       there aren't any negative values, which is good!
+%posfloat = find(basetopgdiff > 0);
+di=md.materials.rho_ice/md.materials.rho_water;
+baf = md.geometry.surface-1/(1-di)*md.geometry.surface;
+posfloat = find((baf-md.geometry.bed)>0); % find floating areas using di
+md.geometry.thickness(posfloat)=1/(1-di)*md.geometry.surface(posfloat);
+md.geometry.base(posfloat)=md.geometry.surface(posfloat)-md.geometry.thickness(posfloat);
+
+pos = find(basetopgdiff > 0 & (baf-md.geometry.bed)<0);
+% treat ice in these areas as grounded and set geometry accordingly (based on topg)
+md.geometry.thickness(pos)=md.geometry.surface(pos)-md.geometry.bed(pos);
+md.geometry.base(pos)=md.geometry.bed(pos);
+
+% do a consistency check (i.e. thickness = surface - base; base is not lower than bed)
+% plotmodel(md,'data',(md.geometry.surface-md.geometry.thickness-md.geometry.base))
+% plotmodel(md,'data',(md.geometry.base-md.geometry.bed))
+
+disp('  Set mask')
+md.mask.ice_levelset         = -1*ones(md.mesh.numberofvertices,1);
+md.mask.ocean_levelset       = +1*ones(md.mesh.numberofvertices,1);
+mask = interpBedmachineGreenland(md.mesh.x,md.mesh.y,'mask');
+% 0 = ocean, 1 = ice-free land, 2 = grounded ice, 3 = floating ice, 4 = non-Greenland land
+%pos = find(mask <= 1 | mask == 4);
+pos = find(mask <= 1 | (md.mask.ice_levelset == -1 & md.mesh.vertexonboundary));
+md.mask.ice_levelset(pos) = 1;
+% Assign floating ice in grounded ice mask
+baf = md.geometry.surface-1/(1-di)*md.geometry.surface;
+posfloat = (baf-md.geometry.bed)>0; % find floating areas using di
+pos = find(mask==0 | posfloat);
+md.mask.ocean_levelset(pos) = -1;
+
+disp('    -> reinitializing levelsets')
+md.mask.ice_levelset   = reinitializelevelset(md, md.mask.ice_levelset);
+md.mask.ocean_levelset = reinitializelevelset(md, md.mask.ocean_levelset);
+
+% NOTE: remove isolated small patches of ice that are disconnected from the large ice sheet mass
+contours = isoline(md, md.mask.ice_levelset, 'value', 0);
+expwrite(contours(1), 'temp.exp')
+levelsetfunction = exp2levelsetfunction(md, 'temp.exp');
+delete('temp.exp');
+%pos = find(levelsetfunction > 0 & md.mask.ice_levelset < 0);
+md.mask.ice_levelset = levelsetfunction;
+% NOTE
+
+disp('  Set inversion method to M1QN3');
+md.inversion=m1qn3inversion();
+
+% Velocity data
+
+disp('   load in velocity data from Joughin');
+%ncvel=datalocs('vel');
+ncvel = '/Users/dfelikso/Research/Data/Velocity/MEaSUREs/greenland-vel-multiyr250-v1.nc';
+% Get velocities (Note: You can use ncdisp('file') to see an ncdump)
+x2    = ncread(ncvel,'x');
+y2    = ncread(ncvel,'y');
+velx  = ncread(ncvel,'velx')';    
+vely  = ncread(ncvel,'vely')';
+
+disp('   Interpolating velocities ');
+md.inversion.vx_obs  = InterpFromGridToMesh(x2,y2,velx,md.mesh.x,md.mesh.y,0);
+md.inversion.vy_obs  = InterpFromGridToMesh(x2,y2,vely,md.mesh.x,md.mesh.y,0);
+md.inversion.vel_obs = sqrt(md.inversion.vx_obs.^2+md.inversion.vy_obs.^2);
+md.initialization.vx = md.inversion.vx_obs;
+md.initialization.vy = md.inversion.vy_obs;
+md.initialization.vz = zeros(md.mesh.numberofvertices,1);
+md.initialization.vel= md.inversion.vel_obs;
+clear x2 y2 velx vely; 
+
+% Climate data
+
+disp('   Loading climate data -- SMB');
+%ncsmb=datalocs('smb');
+ncsmb = '/Users/dfelikso/Research/Data/RACMO/RACMO2.3/originalData/downscaled/smb_rec.1958-2017.BN_RACMO2.3p2_FGRN055_GrIS.MM.nc';
+ncrunoff = '/Users/dfelikso/Research/Data/RACMO/RACMO2.3/originalData/downscaled/runoff.1958-2017.BN_RACMO2.3p2_FGRN055_GrIS.MM.nc';
+x3    = ncread(ncrunoff,'lon'); % despite name in netcdf, it isn't actually lat and lon, but projected x y
+y3    = ncread(ncrunoff,'lat');
+smb   = (sum(ncread(ncsmb,'SMB_rec',[1 1 25],[Inf Inf 360]),3)/30)'; %30 years from Jan 1960 - Dec 1989
+
+disp('   Loading climate data -- surface temperatures');
+%nctemp=datalocs('temp');
+%tskin = (sum(ncread(nctemp,'tskin',[1 1 1 25],[Inf Inf 1 360]),4)/(30*12))'; %30 years from Jan 1960 - Dec 1989
+%lat = ncread(nctemp,'lat')';        % not sure what the projection is for these data
+%lon = ncread(nctemp,'lon')';        % so import lat lon instead
+%[x4,y4] = ll2xy(lat,lon,+1,45,70);  % find x y on polar stereographic
+%index = BamgTriangulate(x4(:),y4(:)); % create index of x y
+
+disp('   Interpolating climate data');
+md.smb.mass_balance=InterpFromGridToMesh(x3,y3,smb,md.mesh.x,md.mesh.y,0);
+md.smb.mass_balance=(md.smb.mass_balance*md.materials.rho_freshwater/md.materials.rho_ice)/1000; %to get m/yr ice equivalent
+%md.initialization.temperature=InterpFromMeshToMesh2d(index,x4(:),y4(:),tskin(:),md.mesh.x,md.mesh.y);
+
+%ice_temp = evalin('base', 'ice_temp');
+%fprintf([yellow_highlight_start, 'WARNING:' yellow_highlight_end ' Using ' num2str(ice_temp) ' deg C for ice temperature!\n'])
+%md.initialization.temperature = ice_temp * ones(md.mesh.numberofvertices,1) + 273.15;
+clear x3 y3 smb lat lon x4 y4 index tskin;
+
+% load in parameterized model
+disp('   Using HO temperature for initializing rheology');
+md3d = loadmodel('./models/ISMIP6Greenland_Thermal.mat');
+
+% depth average the temperature from the HO model
+initialization_temperature_depthavg = DepthAverage(md3d, md3d.initialization.temperature);
+
+% interpolate depth-averaged temperature from the HO model to the SSA model
+initialization_temperature_depthavg_interp =InterpFromMeshToMesh2d(md3d.mesh.elements2d, md3d.mesh.x2d, md3d.mesh.y2d, initialization_temperature_depthavg, md.mesh.x, md.mesh.y);
+md.initialization.temperature = initialization_temperature_depthavg_interp;
+
+% % GHF data
+% disp('   Loading GHF data -- Martos et al 2018');
+% % read table from text file
+% % % Open the text file.
+% fileGHF = fopen(datalocs('ghf'),'r');
+% % % Format for each line of text:
+%     %   column1: double (%f)
+%     %	column2: double (%f)
+%     %   column3: double (%f)
+% formatSpec = '%f%f%f%[^\n\r]';
+% % % read columns of data according to the format.
+% dataArray = textscan(fileGHF, formatSpec, 'Delimiter', ' ', 'MultipleDelimsAsOne', true, 'EmptyValue' ,NaN,'HeaderLines' ,1,...
+%  'ReturnOnError', false, 'EndOfLine', '\r\n');
+% % % Close the text file.
+% fclose(fileGHF);
+% % % Allocate imported array to column variable names
+% lat = dataArray{:, 1};
+% lon = dataArray{:, 2};
+% ghf = dataArray{:, 3}/1000; %convert from mW/m^2 to W/m^2  
+% % convert from lat long to x, y (model projection)
+% [x,y] = ll2xy(lat,lon,+1,45,70);
+% % create index of x y
+% index = BamgTriangulate(x(:),y(:));
+% % Interpolate from data mesh to model mesh...
+% md.basalforcings.geothermalflux = InterpFromMeshToMesh2d(index,x,y,ghf,md.mesh.x,md.mesh.y);
+% clear formatSpec fileGHF dataArray ghf index;
+
+% Basal friction
+
+%disp('   Construct basal friction parameters');
+md.friction.coefficient=30*ones(md.mesh.numberofvertices,1); % initial guess
+pos=find(md.mask.ocean_levelset<0);
+md.friction.coefficient(pos)=0; %no friction applied on floating ice
+md.friction.p=ones(md.mesh.numberofelements,1);
+md.friction.q=ones(md.mesh.numberofelements,1);
+
+% Other parameters
+
+disp('   Construct ice rheological properties');
+md.materials.rheology_n=3*ones(md.mesh.numberofelements,1);
+%md.materials.rheology_B=paterson(md.initialization.temperature); %initial guess of temperature comes from surface temperature
+md.materials.rheology_B=cuffey(md.initialization.temperature);
+
+disp('   Set other boundary conditions');
+md=SetMarineIceSheetBC(md);
+%md.mask.ice_levelset(md.mesh.vertexonboundary==1)=0;
+md.basalforcings.floatingice_melting_rate = zeros(md.mesh.numberofvertices,1);
+md.basalforcings.groundedice_melting_rate = zeros(md.mesh.numberofvertices,1);
+md.thermal.spctemperature = [md.initialization.temperature;1]; %impose observed temperature on surface
+md.masstransport.spcthickness = NaN*ones(md.mesh.numberofvertices,1);
+
+disp('   Set Pressure');
+md.initialization.pressure=md.materials.rho_ice*md.constants.g*md.geometry.thickness;
+
+disp('   Single point constraints');
+%Initialize single point constraint arrays
+md.stressbalance.referential=NaN*ones(md.mesh.numberofvertices,6);
+md.stressbalance.spcvx = NaN*ones(md.mesh.numberofvertices,1);
+md.stressbalance.spcvy = NaN*ones(md.mesh.numberofvertices,1);
+md.stressbalance.spcvz = NaN*ones(md.mesh.numberofvertices,1);
+
