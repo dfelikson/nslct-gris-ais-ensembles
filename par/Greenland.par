@@ -183,6 +183,9 @@ disp('   Construct ice rheological properties');
 md.materials.rheology_n=3*ones(md.mesh.numberofelements,1);
 %md.materials.rheology_B=paterson(md.initialization.temperature); %initial guess of temperature comes from surface temperature
 md.materials.rheology_B=cuffey(md.initialization.temperature);
+rheology = evalin('base','rheology');
+fprintf([yellow_highlight_start '      -> adjusting rheology by %+3.1f%%' yellow_highlight_end '\n'], rheology);
+md.materials.rheology_B = (1+rheology/100) .* md.materials.rheology_B;
 
 disp('   Set Pressure');
 md.initialization.pressure=md.materials.rho_ice*md.constants.g*md.geometry.thickness;
