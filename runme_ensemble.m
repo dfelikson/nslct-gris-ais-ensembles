@@ -13,14 +13,15 @@
 
 n_ensemble_members = 25;
 
+% old
 rheology = 0; relaxation_start_yr =  5; calving = 'VM'; ensembleGroup = 'E';
 %rheology = 0; relaxation_start_yr = 10; calving = 'VM'; ensembleGroup = 'F';
 rheology = 0; relaxation_start_yr = 20; calving = 'VM'; ensembleGroup = 'G';
-%rheology = 0; relaxation_start_yr =  5; calving = 'CD'; ensembleGroup = 'H';
-%rheology = 0; relaxation_start_yr = 10; calving = 'CD'; ensembleGroup = 'I';
-%rheology = 0; relaxation_start_yr = 20; calving = 'CD'; ensembleGroup = 'J';
 
-sliding = 1;
+% new
+%rheology = 0; relaxation_start_yr =  0; calving = 'VM'; ensembleGroup = 'H';
+%rheology = 0; relaxation_start_yr =  5; calving = 'VM'; ensembleGroup = 'I';
+rheology = 0; relaxation_start_yr = 20; calving = 'VM'; ensembleGroup = 'J';
 
 ocean_forcing = 'EN4';
 
@@ -63,119 +64,134 @@ else %%{{{
 end
 %%}}}
 
+% NOTE: Ensemble number 000 coresponds to
+%        friction = 0
+%        sigma_max   = 1200 (VM calving)
+%        water_depth = 25?? (CD calving) TODO
+
 % Run
 % param / inversion / relaxation
-if false
 %%{{{
 for i = 1:n_ensemble_members
    ensembleID = sprintf('%1s%03d', ensembleGroup, i);
    fprintf('\n');
    fprintf([green_text_start 'Running ensembleID: ' ensembleID green_text_end '\n']);
+
+   model_relaxation_name = ['models/ice_temperature_HO/gris.relaxation.' ensembleID '.ssa.tr.sent2cluster'];
+   if exist(model_relaxation_name,'file')
+      fprintf([' Model ' model_relaxation_name ' already exists ... skipping!\n']);
+      continue
+   end
    fprintf('\n');
-   switch calving
-      case 'VM'
-         friction  = s_VM(i,1);
-         sigma_max = s_VM(i,2);
-      case 'CD'
-         friction    = s_CD(i,1);
-         water_depth = s_CD(i,2);
+
+   if i>0
+      switch calving
+         case 'VM'
+            friction  = s_VM(i,1);
+            sigma_max = s_VM(i,2);
+         case 'CD'
+            friction    = s_CD(i,1);
+            water_depth = s_CD(i,2);
+      end
+   else
+      friction = 0;
+      switch calving
+         case 'VM'
+            sigma_max = 1200;
+         case 'CD'
+            water_depth = 25; %??? TODO
+      end
    end
    
-   if i == 1
-      %runme_param;
-      %runme_inversion;
+   if i == 0
+      runme_param;
+      runme_inversion;
       runme_relaxation;
    else
-      %runme_relaxation_from001;
+      runme_relaxation_ensembleprep_from000;
    end
 end
 %%}}}
+d = dir('./*tar.gz');
+ensemblejobs = {};
+for i=1:numel(d)
+   ensemblejobs{i} = d(i).name;
+end
+if ~isempty(ensemblejobs)
+   md = solve(md, 'tr', 'ensemblelaunch', true, 'ensemblejobs', ensemblejobs);
+   for i=1:numel(ensemblejobs)
+      [flag, message, messageid] = movefile(ensemblejobs{i}, '~/.Trash','f');
+   end
 end
 
 % Load relaxation results
-if false
-%%{{{
 f = fopen('tmp_execution/tmp_rsync_list.txt', 'w');
-for i = 1:n_ensemble_members
+for i = 1:n_ensemble_members %%{{{
    ensembleID = sprintf('%1s%03d', ensembleGroup, i);
    if exist(['models/ice_temperature_HO/gris.relaxation.' ensembleID '.ssa.tr'],'file')
       fprintf('Output file already exists. Skipping.\n');
       continue
    end
    fprintf('\n');
-   fprintf([green_text_start 'Running ensembleID: ' ensembleID green_text_end '\n']);
-   fprintf('\n');
-   switch calving
-      case 'VM'
-         friction  = s_VM(i,1);
-         sigma_max = s_VM(i,2);
-      case 'CD'
-         friction    = s_CD(i,1);
-         water_depth = s_CD(i,2);
+   fprintf([green_text_start 'Cataloging ensembleID: ' ensembleID green_text_end '\n']);
+
+   model_relaxation_name = ['models/ice_temperature_HO/gris.relaxation.' ensembleID '.ssa.tr'];
+   if exist(model_relaxation_name,'file')
+      fprintf([' Model ' model_relaxation_name ' already exists ... skipping!\n']);
+      continue
    end
-   
+   fprintf('\n');
+
    filename = ['./models/ice_temperature_HO/gris.relaxation.' ensembleID '.ssa.tr.sent2cluster'];
    md = loadmodel(filename);
    fprintf(f, '%s/gris_ssa_sbinv.errlog\n', md.private.runtimename);
    fprintf(f, '%s/gris_ssa_sbinv.outlog\n', md.private.runtimename);
    fprintf(f, '%s/gris_ssa_sbinv.outbin\n', md.private.runtimename);
-   
 end
 %%}}}
-end
-
-%rsync -avz --progress -d --files-from tmp_execution/tmp_rsync_list.txt dfelikso@discover.nccs.nasa.gov:/discover/nobackup/dfelikso/Software/ISSM/trunk-jpl/execution/ tmp_execution/
 
 %runme_relaxation_loadresultsfromcluster;
-if false
-%%{{{
-for i = 1:n_ensemble_members
-   ensembleID = sprintf('%1s%03d', ensembleGroup, i);
-   fprintf('\n');
-   fprintf([green_text_start 'Running ensembleID: ' ensembleID green_text_end '\n']);
-   fprintf('\n');
+s = dir('tmp_execution/tmp_rsync_list.txt');
+if s.bytes > 0 %%{{{
+   %command = ['rsync -avz --progress -d --files-from tmp_execution/tmp_rsync_list.txt dfelikso@discover.nccs.nasa.gov:/discover/nobackup/dfelikso/Software/ISSM/trunk-jpl/execution/ tmp_execution/'];
+   %[status,cmdout] = system(command);
 
-   % Relaxation
-   filename = ['./models/ice_temperature_HO/gris.relaxation.' ensembleID '.ssa.tr.sent2cluster'];
-   fprintf(['loading ' filename '\n']);
-   md = loadmodel(filename);
-
-   cluster = md.cluster;
-   md.cluster = load_cluster('');
-   md.cluster.executionpath = './tmp_execution';
-
-   md = loadresultsfromcluster(md);
-
-   md.cluster = cluster;
-
-   % Save model with results
-   filename = ['./models/ice_temperature_HO/gris.relaxation.' ensembleID '.ssa.tr'];
-   fprintf(['saving ' filename '\n']);
-   save(filename, 'md', '-v7.3');
+   for i = 1:n_ensemble_members
+      ensembleID = sprintf('%1s%03d', ensembleGroup, i);
+      fprintf('\n');
+      fprintf([green_text_start 'Loading ensembleID: ' ensembleID green_text_end '\n']);
+      fprintf('\n');
+   
+      % Relaxation
+      filename = ['./models/ice_temperature_HO/gris.relaxation.' ensembleID '.ssa.tr.sent2cluster'];
+      fprintf(['loading ' filename '\n']);
+      md = loadmodel(filename);
+      
+      cluster = md.cluster;
+      md.cluster = load_cluster('');
+      md.cluster.executionpath = './tmp_execution';
+   
+      md = loadresultsfromcluster(md);
+   
+      md.cluster = cluster;
+   
+      % Save model with results
+      filename = ['./models/ice_temperature_HO/gris.relaxation.' ensembleID '.ssa.tr'];
+      fprintf(['saving ' filename '\n']);
+      save(filename, 'md', '-v7.3');
+   end
 end
 %%}}}
-end
-  
+
 % Run moving front
-if false
 %%{{{
-for i = 1:n_ensemble_members
+for i = n_ensemble_members
    ensembleID = sprintf('%1s%03d', ensembleGroup, i);
    fprintf('\n');
    fprintf([green_text_start 'Running ensembleID: ' ensembleID green_text_end '\n']);
-   fprintf('\n');
 
    % Moving front
-   switch calving
-      case 'VM'
-         friction  = s_VM(i,1);
-         sigma_max = s_VM(i,2);
-      case 'CD'
-         friction    = s_CD(i,1);
-         water_depth = s_CD(i,2);
-   end
-   
-   if i == 1
+   if i == 0
       md = loadmodel(['./models/ice_temperature_HO/gris.relaxation.' ensembleID '.ssa.tr']);
 
       % Start and end time setup
@@ -204,40 +220,96 @@ for i = 1:n_ensemble_members
       frontalforcings_meltingrate(pos,:) = 0;
    end
 
-   runme_movingfront;
+   if exist(['models/ice_temperature_HO/gris.movingfront.' ensembleID '.ssa.tr.sent2cluster'],'file')
+      fprintf('Output file already exists. Skipping.\n');
+      continue
+   end
+   fprintf('\n');
+
+   if i > 0
+      switch calving
+         case 'VM'
+            friction  = s_VM(i,1);
+            sigma_max = s_VM(i,2);
+         case 'CD'
+            friction    = s_CD(i,1);
+            water_depth = s_CD(i,2);
+      end
+   else
+      switch calving
+         case 'VM'
+            friction  = 0;
+            sigma_max = 5e6;
+         case 'CD'
+            friction    = 0;
+            water_depth = 25;
+      end
+   end
+   
+   runme_movingfront_ensembleprep;
 end
 %%}}}
+d = dir('./*tar.gz');
+ensemblejobs = {};
+for i=1:numel(d)
+   ensemblejobs{i} = d(i).name;
+end
+if ~isempty(ensemblejobs)
+   md = solve(md, 'tr', 'ensemblelaunch', true, 'ensemblejobs', ensemblejobs);
+   for i=1:numel(ensemblejobs)
+      [flag, message, messageid] = movefile(ensemblejobs{i}, '~/.Trash','f');
+   end
 end
 
 % Load moving front results
-if false
 %%{{{
 f = fopen('tmp_execution/tmp_rsync_list.txt', 'w');
 for i = 1:n_ensemble_members
    ensembleID = sprintf('%1s%03d', ensembleGroup, i);
    fprintf('\n');
-   fprintf([green_text_start 'Running ensembleID: ' ensembleID green_text_end '\n']);
+   fprintf([green_text_start 'Cataloging ensembleID: ' ensembleID green_text_end '\n']);
    fprintf('\n');
-   switch calving
-      case 'VM'
-         friction  = s_VM(i,1);
-         sigma_max = s_VM(i,2);
-      case 'CD'
-         friction    = s_CD(i,1);
-         water_depth = s_CD(i,2);
-   end
    
    %runme_movingfront_loadresultsfromcluster;
    filename = ['./models/ice_temperature_HO/gris.movingfront.' ensembleID '.ssa.tr.sent2cluster'];
    md = loadmodel(filename);
-   fprintf(f, '%s/gris_ssa_sbinv.errlog\n', md.private.runtimename);
-   fprintf(f, '%s/gris_ssa_sbinv.outlog\n', md.private.runtimename);
-   fprintf(f, '%s/gris_ssa_sbinv.outbin\n', md.private.runtimename);
+   fprintf(f, ['%s/' md.miscellaneous.name '.errlog\n'], md.private.runtimename);
+   fprintf(f, ['%s/' md.miscellaneous.name '.outlog\n'], md.private.runtimename);
+   fprintf(f, ['%s/' md.miscellaneous.name '.outbin\n'], md.private.runtimename);
 end
 %%}}}
-end
 
-%rsync -avz --progress -d --files-from tmp_execution/tmp_rsync_list.txt dfelikso@discover.nccs.nasa.gov:/discover/nobackup/dfelikso/Software/ISSM/trunk-jpl/execution/ tmp_execution/
+s = dir('tmp_execution/tmp_rsync_list.txt');
+if s.bytes > 0 %%{{{
+   command = 'rsync -avz --progress -d --files-from tmp_execution/tmp_rsync_list.txt dfelikso@discover.nccs.nasa.gov:/discover/nobackup/dfelikso/Software/ISSM/trunk-jpl/execution/ tmp_execution/';
+   system(command)
+
+   for i = 1:n_ensemble_members
+      ensembleID = sprintf('%1s%03d', ensembleGroup, i);
+      fprintf('\n');
+      fprintf([green_text_start 'Loading ensembleID: ' ensembleID green_text_end '\n']);
+      fprintf('\n');
+   
+      % Relaxation
+      filename = ['./models/ice_temperature_HO/gris.movingfront.' ensembleID '.ssa.tr.sent2cluster'];
+      fprintf(['loading ' filename '\n']);
+      md = loadmodel(filename);
+      
+      cluster = md.cluster;
+      md.cluster = load_cluster('');
+      md.cluster.executionpath = './tmp_execution';
+   
+      md = loadresultsfromcluster(md);
+   
+      md.cluster = cluster;
+   
+      % Save model with results
+      filename = ['./models/ice_temperature_HO/gris.movingfront.' ensembleID '.ssa.tr'];
+      fprintf(['saving ' filename '\n']);
+      save(filename, 'md', '-v7.3');
+   end
+end
+return
 
 %runme_movingfront_loadresultsfromcluster;
 %%{{{

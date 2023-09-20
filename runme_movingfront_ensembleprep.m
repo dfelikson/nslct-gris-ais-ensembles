@@ -80,7 +80,7 @@ md.miscellaneous.name = 'gris_ssa_tr';
 md.cluster = load_cluster('discover');
 md.settings.waitonlock = 0; 9999;
 md.toolkits = toolkits;
-md = solve(md, 'tr');
+md = solve(md, 'tr', 'ensembleprep', true);
 
 % Save the model that was sent to the cluster
 filename = ['./models/ice_temperature_HO/gris.movingfront.' ensembleID '.ssa.tr.sent2cluster'];
