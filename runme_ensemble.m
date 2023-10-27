@@ -210,6 +210,10 @@ for i = n_ensemble_members
       frontalforcings_meltingrate(end,:) = twglaciers(1).submelt.t(idx_start:idx_final);
       for i_twg = 1:numel(twglaciers)
          submelt = eval(['twglaciers(i_twg).submelt.m_' ocean_forcing]);
+         % Adjust the forcing for Jakobshavn
+         if i_twg == 1
+            submelt = submelt / 2;
+         end
          pos = find(md_basins == twglaciers(i_twg).basin_num);
          frontalforcings_meltingrate(pos,:) = repmat(submelt(idx_start:idx_final), length(pos), 1) * 365.25;
          if any(isnan(frontalforcings_meltingrate(pos,:)))
