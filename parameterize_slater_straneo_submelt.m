@@ -1,5 +1,6 @@
 function [md_basins, twglaciers] = parameterize_slater_straneo_submelt(md)
-   load /Users/dfelikso/Research/Data/donaldaslater-slater_2022_submelt-97d9702/data/twglaciers.mat
+   %load /Users/dfelikso/Research/Data/donaldaslater-slater_2022_submelt-97d9702/data/twglaciers.mat
+   load ../GitRepositories/slater_2022_submelt/data/twglaciers.mat
    load /Users/dfelikso/Research/Projects/ISMIP6/GrIS_Ocean_Forcing/Tidewater_Basins/mat/basins4highres.mat
    load /Users/dfelikso/Research/Projects/ISMIP6/GrIS_Ocean_Forcing/Tidewater_Basins/mat/basins4highres_xy.mat
 
