@@ -1,4 +1,9 @@
-md = loadmodel(['./models/ice_temperature_HO/gris.param.' ensembleID '.mat']);
+if exist(['./models/' branch '/' branch '.inversion.' ensembleID '.ssa.sb.mat'], 'file');
+   fprintf(['Model already exists: ./models/' branch '/' branch '.inversion.' ensembleID '.ssa.sb.mat. Skipping runme_inversion.m!\n']);
+   return
+end
+
+md = loadmodel(['./models/' branch '/' branch '.param.' ensembleID '.mat']);
 
 md_nias = loadmodel('models/nias_ensemble_setup/gris.cmmtt.control_drag.ssa.sb');
 md.friction.coefficient = InterpFromMeshToMesh2d(md_nias.mesh.elements, md_nias.mesh.x, md_nias.mesh.y, md_nias.friction.coefficient, md.mesh.x, md.mesh.y);
@@ -50,9 +55,9 @@ md.miscellaneous.name='gris_ssa_sbinv';
 md.cluster.interactive=0; %runs in background on cluster (adds & to end of *.queue)
 md.toolkits=toolkits;
 md.verbose=verbose('control',true);
-md.settings.waitonlock=NaN; % Model results must be loaded manually with md=loadresultsfromcluster(md);
+md.settings.waitonlock=9999; % Model results must be loaded manually with md=loadresultsfromcluster(md);
 
 md=solve(md,'sb');
 
-save(['./models/ice_temperature_HO/gris.inversion.' ensembleID '.ssa.sb.mat'], 'md');
+save(['./models/' branch '/' branch '.inversion.' ensembleID '.ssa.sb.mat'], 'md');
 

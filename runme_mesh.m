@@ -1,27 +1,16 @@
-addpath(genpath('/Users/dfelikso/Software/ScriptsAndUtilities/matlab'));
-debug_plots = false;
-
-% Step 1 - buffer the original domain outline
-GrIS_exp_nias = './Exp/DomainOutlineEditV3.exp';
-GrIS_exp_expanded = './Exp/DomainOutlineEditV3_expanded.exp';
-
-a = [-2.1823e+05 -1.6148e+05 -2.2277e+06 -2.1300e+06];
-a = [-0.2102e+06 -0.1829e+06   -2.2247e+06   -2.1778e+06];
-a = [-0.2055   -0.1981   -2.2079   -2.1952] * 1e+06;
+if exist(['./models/' branch '/' branch '.mesh.mat'], 'file');
+   fprintf(['Model already exists: ./models/' branch '/' branch '.mesh.mat. Skipping runme_mesh.m!\n']);
+   return
+end
 
 hinit = 1000;
 hmin = 500;
 hmid = 1500;
 hmax = 25000;
 
-% Step 2 - generate a new mesh, refine based on bed topography
-expcontract(GrIS_exp_expanded, GrIS_exp_nias, 5000);
-
-%GrIS_exp_expanded = 'tmp.exp';
-
 % Generate initial uniform mesh (resolution = 500 m)
 fprintf('create uniform %4.1f km mesh\n', hinit/1000);
-md = triangle(model, GrIS_exp_expanded, hinit);
+md = triangle(model, ['./Exp/' branch '.exp'], hinit);
 
 % extra refinement beyond present-day ice mask
 %bed = interpBedmachineGreenland(md.mesh.x, md.mesh.y);
@@ -33,9 +22,13 @@ mask = interpBedmachineGreenland(md.mesh.x, md.mesh.y, 'mask');
 %disp('reinitialize levelset');
 %signed_distance = reinitializelevelset(md, signed_distance);
 
-% Beyond the present-day front, refine to medium resolution
+% NOTE: Buffer the current ice extent by one element and refine to high resolution
+
+% NOTE: Remove ice from nodes that are connected to only one other ice node
+
+% Beyond the present-day front, where there is ocean, refine to high resolution
 h = NaN * ones(md.mesh.numberofvertices,1);
-pos = find(mask ~= 2);
+pos = find(mask == 0);
 h(pos) = hmid;
 
 % buffer by one element
@@ -50,7 +43,9 @@ h(pos) = hmid;
 vel = sqrt(vx.^2 + vy.^2);
 
 disp('refine mesh');
-md = bamg(md,'hmax',hmax,'hmin',hmin,'gradation',1.7,'field',vel,'err',8,'hVertices',h);
+% md = bamg(md,'hmax',hmax,'hmin',hmin,'gradation',1.7,'field',vel,'err',8,'hVertices',h);
+md = bamg(md,'hmax',hmax,'hmin',hmin,'field',vel,'err',5,'hVertices',h);
 
-disp('saving ./models/initial_mesh_setup/gris.mesh.mat')
-save models/initial_mesh_setup/gris.mesh.mat md;
+disp(['saving ./models/' branch '/' branch '.mesh.mat'])
+save(['./models/' branch '/' branch '.mesh.mat'], 'md');
+
