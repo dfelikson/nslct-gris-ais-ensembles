@@ -1,5 +1,10 @@
+if exist(['./models/' branch '/' branch '.relaxation.' ensembleID '.ssa.tr.sent2cluster'], 'file')
+   fprintf(['Model already exists: ./models/' branch '/' branch '.relaxation.' ensembleID '.ssa.tr.sent2cluster. Skipping runme_relaxation.m!\n']);
+   return
+end
+
 % Load model
-md = loadmodel(['./models/ice_temperature_HO/gris.inversion.' ensembleID '.ssa.sb']);
+md = loadmodel(['./models/' branch '/' branch '.inversion.' ensembleID '.ssa.sb']);
 
 % Start and end time setup
 md.timestepping.time_step=0.05;%0.01; % need to adjust for CFL
@@ -68,22 +73,22 @@ end
 
 friction = evalin('base','friction');
 fprintf([yellow_highlight_start 'Changing friction coefficient by %3.1f%%' yellow_highlight_end '\n'], friction);
-md.friction.coefficient = (1+friction/100) * md.friction.coefficient;
+md.friction.coefficient = friction * md.friction.coefficient;
 
 % Outputs
 md.verbose = verbose('solution', true);
 md.transient.requested_outputs = {'default', 'IceVolumeAboveFloatation'}; %, 'CalvingAblationrate'};
 
 % Solve
-md.cluster = load_cluster('oibserve');
-md.cluster.interactive = 0;
-%md.cluster = load_cluster('discover');
+%md.cluster = load_cluster('oibserve');
+%md.cluster.interactive = 0;
+md.cluster = load_cluster('discover');
 md.settings.waitonlock = 0;
 md.toolkits = toolkits;
 md = solve(md, 'tr');
 
 % Save the model that was sent to the cluster
-filename = ['./models/ice_temperature_HO/gris.relaxation.' ensembleID '.ssa.tr.sent2cluster'];
+filename = ['./models/' branch '/' branch '.relaxation.' ensembleID '.ssa.tr.sent2cluster'];
 fprintf(['saving ' filename '\n']);
 save(filename, 'md', '-v7.3');
 

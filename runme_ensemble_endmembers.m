@@ -33,19 +33,11 @@ end
 
 % Run
 % mesh / param / inversion / relaxation
-%%{{{ 
 runme_mesh;
-for i = 1:length(friction_end_members)
+for i = 1:length(friction_end_members) %%{{{
    ensembleID = sprintf('%1s9%02d', ensembleGroup, i);
    fprintf('\n');
    fprintf([green_text_start 'Running ensembleID: ' ensembleID green_text_end '\n']);
-
-   model_relaxation_name = ['models/' branch '/gris.relaxation.' ensembleID '.ssa.tr.sent2cluster'];
-   if exist(model_relaxation_name,'file')
-      fprintf([' Model ' model_relaxation_name ' already exists ... skipping!\n']);
-      continue
-   end
-   fprintf('\n');
 
    rheology  = rheology_end_members(i);
    friction  = friction_end_members(i);
@@ -58,145 +50,72 @@ for i = 1:length(friction_end_members)
 end
 %%}}}
 
-return
-
-d = dir('./*tar.gz');
-ensemblejobs = {};
-for i=1:numel(d)
-   ensemblejobs{i} = d(i).name;
-end
-if ~isempty(ensemblejobs)
-   md = solve(md, 'tr', 'ensemblelaunch', true, 'ensemblejobs', ensemblejobs);
-   for i=1:numel(ensemblejobs)
-      [flag, message, messageid] = movefile(ensemblejobs{i}, '~/.Trash','f');
-   end
-end
-
-% Load relaxation results
-f = fopen('tmp_execution/tmp_rsync_list.txt', 'w');
-for i = 1:n_ensemble_members %%{{{
-   ensembleID = sprintf('%1s%03d', ensembleGroup, i);
-   if exist(['models/ice_temperature_HO/gris.relaxation.' ensembleID '.ssa.tr'],'file')
-      fprintf('Output file already exists. Skipping.\n');
-      continue
-   end
+for i = 1:length(friction_end_members)
+   ensembleID = sprintf('%1s9%02d', ensembleGroup, i);
    fprintf('\n');
-   fprintf([green_text_start 'Cataloging ensembleID: ' ensembleID green_text_end '\n']);
+   fprintf([green_text_start 'Loading relaxation for ensembleID: ' ensembleID green_text_end '\n']);
 
-   model_relaxation_name = ['models/ice_temperature_HO/gris.relaxation.' ensembleID '.ssa.tr'];
-   if exist(model_relaxation_name,'file')
-      fprintf([' Model ' model_relaxation_name ' already exists ... skipping!\n']);
-      continue
-   end
-   fprintf('\n');
-
-   filename = ['./models/ice_temperature_HO/gris.relaxation.' ensembleID '.ssa.tr.sent2cluster'];
-   md = loadmodel(filename);
-   fprintf(f, '%s/gris_ssa_sbinv.errlog\n', md.private.runtimename);
-   fprintf(f, '%s/gris_ssa_sbinv.outlog\n', md.private.runtimename);
-   fprintf(f, '%s/gris_ssa_sbinv.outbin\n', md.private.runtimename);
+   runme_relaxation_loadresultsfromcluster;
 end
-%%}}}
-
-%runme_relaxation_loadresultsfromcluster;
-s = dir('tmp_execution/tmp_rsync_list.txt');
-if s.bytes > 0 %%{{{
-   %command = ['rsync -avz --progress -d --files-from tmp_execution/tmp_rsync_list.txt dfelikso@discover.nccs.nasa.gov:/discover/nobackup/dfelikso/Software/ISSM/trunk-jpl/execution/ tmp_execution/'];
-   %[status,cmdout] = system(command);
-
-   for i = 1:n_ensemble_members
-      ensembleID = sprintf('%1s%03d', ensembleGroup, i);
-      fprintf('\n');
-      fprintf([green_text_start 'Loading ensembleID: ' ensembleID green_text_end '\n']);
-      fprintf('\n');
-   
-      % Relaxation
-      filename = ['./models/ice_temperature_HO/gris.relaxation.' ensembleID '.ssa.tr.sent2cluster'];
-      fprintf(['loading ' filename '\n']);
-      md = loadmodel(filename);
-      
-      cluster = md.cluster;
-      md.cluster = load_cluster('');
-      md.cluster.executionpath = './tmp_execution';
-   
-      md = loadresultsfromcluster(md);
-   
-      md.cluster = cluster;
-   
-      % Save model with results
-      filename = ['./models/ice_temperature_HO/gris.relaxation.' ensembleID '.ssa.tr'];
-      fprintf(['saving ' filename '\n']);
-      save(filename, 'md', '-v7.3');
-   end
-end
-%%}}}
 
 % Run moving front
-%%{{{
-for i = n_ensemble_members
-   ensembleID = sprintf('%1s%03d', ensembleGroup, i);
-   fprintf('\n');
-   fprintf([green_text_start 'Running ensembleID: ' ensembleID green_text_end '\n']);
-
+for i = 1:length(friction_end_members) %%{{{
+   ensembleID = sprintf('%1s9%02d', ensembleGroup, i);
    % Moving front
-   if i == 0
-      md = loadmodel(['./models/ice_temperature_HO/gris.relaxation.' ensembleID '.ssa.tr']);
+   fprintf('\n');
+   fprintf('Preparing frontalforcings\n');
+   if i == 1
+      md = loadmodel(['./models/' branch '/' branch '.relaxation.' ensembleID '.ssa.tr']);
 
       % Start and end time setup
-      md.timestepping.time_step=0.05;%0.01; % need to adjust for CFL
+      md.timestepping.time_step=0.01; % need to adjust for CFL
       md.timestepping.start_time=2007; %years
-      md.timestepping.final_time=2016; %years
-      md.settings.output_frequency=4; % output every Nth timestep
+      md.timestepping.final_time=2020; %years
+      md.settings.output_frequency=20; % output every Nth timestep
 
-      % Slater and Straneo (2022) frontal forcings
+      % Slater and Straneo (2022) frontal forcings -- scaled with bed depth
       [md_basins, twglaciers] = parameterize_slater_straneo_submelt(md);
-      idx_start = find(twglaciers(1).submelt.t >= md.timestepping.start_time, 1, 'first');
-      idx_final = find(twglaciers(1).submelt.t <= md.timestepping.final_time, 1, 'last');
-      ocean_forcing = evalin('base', 'ocean_forcing');
+      t = eval(['twglaciers(1).ocean.' ocean_forcing '.t']);
+      idx_start = find(t >= md.timestepping.start_time, 1, 'first');
+      idx_final = find(t <= md.timestepping.final_time, 1, 'last');
+      t = t(idx_start:idx_final);
       fprintf([yellow_highlight_start 'Using ocean forcing: %s' yellow_highlight_end '\n'], ocean_forcing);
-      frontalforcings_meltingrate = 0 * ones(md.mesh.numberofvertices+1,length(twglaciers(1).submelt.t(idx_start:idx_final)));
-      frontalforcings_meltingrate(end,:) = twglaciers(1).submelt.t(idx_start:idx_final);
+      frontalforcings_meltingrate = 0 * ones(md.mesh.numberofvertices+1,length(t));
+      frontalforcings_meltingrate(end,:) = t;
       for i_twg = 1:numel(twglaciers)
-         submelt = eval(['twglaciers(i_twg).submelt.m_' ocean_forcing]);
          pos = find(md_basins == twglaciers(i_twg).basin_num);
-         frontalforcings_meltingrate(pos,:) = repmat(submelt(idx_start:idx_final), length(pos), 1) * 365.25;
-         if any(isnan(frontalforcings_meltingrate(pos,:)))
-            fprintf('WARNING: NaNs in meltingrate for twglacier idx %d (%s, morlighem_number %d, basin %d)\n', i_twg, twglaciers(i_twg).name, twglaciers(i_twg).morlighem_number, twglaciers(i_twg).basin_num);
+         if ~isempty(pos)
+            bed_min = min(md.geometry.bed(pos));
+
+            z = eval(['twglaciers(i_twg).ocean.' ocean_forcing '.z']);
+            Q_sg = interp1(twglaciers(i_twg).runoff.RACMO.t, twglaciers(i_twg).runoff.RACMO.Q, t) * (86400/1000000);
+            TF = eval(['twglaciers(i_twg).ocean.' ocean_forcing '.TF']);
+            TF = TF(:,idx_start:idx_final);
+            if min(z) > bed_min;
+               z(end+1) = bed_min;
+               TF(end+1,:) = TF(end,:);
+            end
+
+            TF_interp = interp1(z, TF, md.geometry.bed(pos));
+            frontalforcings_meltingrate(pos,:) = ((3e-4 .* -md.geometry.bed(pos) .* Q_sg.^0.39 + 0.15) .* TF_interp.^1.18) .* 365;
          end
       end
-      pos = find(md.geometry.bed > 0 );
+
+      % Cleanup
+      pos = find(md.geometry.bed > 0);
       frontalforcings_meltingrate(pos,:) = 0;
+      pos = find(isnan(frontalforcings_meltingrate));
+      frontalforcings_meltingrate(pos) = 0;
    end
 
-   if exist(['models/ice_temperature_HO/gris.movingfront.' ensembleID '.ssa.tr.sent2cluster'],'file')
-      fprintf('Output file already exists. Skipping.\n');
-      continue
-   end
    fprintf('\n');
+   fprintf([green_text_start 'Running moving front for ensembleID: ' ensembleID green_text_end '\n']);
 
-   if i > 0
-      switch calving
-         case 'VM'
-            friction  = s_VM(i,1);
-            sigma_max = s_VM(i,2);
-         case 'CD'
-            friction    = s_CD(i,1);
-            water_depth = s_CD(i,2);
-      end
-   else
-      switch calving
-         case 'VM'
-            friction  = 0;
-            sigma_max = 5e6;
-         case 'CD'
-            friction    = 0;
-            water_depth = 25;
-      end
-   end
-   
-   runme_movingfront_ensembleprep;
+   runme_movingfront;
 end
 %%}}}
+return
+
 d = dir('./*tar.gz');
 ensemblejobs = {};
 for i=1:numel(d)

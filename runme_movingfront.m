@@ -1,5 +1,10 @@
+if exist(['./models/' branch '/' branch '.movingfront.' ensembleID '.ssa.tr.sent2cluster'], 'file')
+   fprintf(['Model already exists: ./models/' branch '/' branch '.movingfront.' ensembleID '.ssa.tr.sent2cluster. Skipping runme_movingfront.m!\n']);
+   return
+end
+
 % Load model
-md = loadmodel(['./models/ice_temperature_HO/gris.relaxation.' ensembleID '.ssa.tr']);
+md = loadmodel(['./models/' branch '/' branch '.relaxation.' ensembleID '.ssa.tr']);
  
 % Select the starting point from the relaxation
 %relaxation_start_yr = 20; % 5 | 10 | 15 | 20
@@ -17,12 +22,6 @@ if relaxation_start_yr ~= 0
 else
    md.results.TransientSolution  = struct();
 end
-
-% Start and end time setup
-md.timestepping.time_step=0.05;%0.01; % need to adjust for CFL
-md.timestepping.start_time=2007; %years
-md.timestepping.final_time=2016; %years
-md.settings.output_frequency=4; % output every Nth timestep
 
 md.frontalforcings.meltingrate = frontalforcings_meltingrate;
 
@@ -44,10 +43,18 @@ switch calving
      md.calving.water_height = water_height * ones(md.mesh.numberofvertices,1);
 end
 
+% spclevelset -- where there's no ice and bed>0, keep it that way
 md.levelset.spclevelset = nan * ones(md.mesh.numberofvertices,1);
 %pos = find(md.geometry.bed < 0 & md.mesh.vertexonboundary);
 %md.levelset.spclevelset(pos) = nan;
 %md.levelset.migration_max = 1e6;
+
+pos = md.mask.ice_levelset>0 & md.geometry.bed>0;
+md.levelset.spclevelset(pos) = 1;
+
+% Other settings
+md.levelset.stabilization = 2;
+md.levelset.reinit_frequency = 1;
 
 % Turn on movingfront
 md.transient.ismovingfront = 1;
@@ -83,7 +90,7 @@ md.toolkits = toolkits;
 md = solve(md, 'tr');
 
 % Save the model that was sent to the cluster
-filename = ['./models/ice_temperature_HO/gris.movingfront.' ensembleID '.ssa.tr.sent2cluster'];
+filename = ['./models/' branch '/' branch '.movingfront.' ensembleID '.ssa.tr.sent2cluster'];
 fprintf(['saving ' filename '\n']);
 save(filename, 'md', '-v7.3');
 
