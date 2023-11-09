@@ -114,24 +114,25 @@ clear x2 y2 velx vely;
 
 disp('   Loading climate data -- SMB');
 %ncsmb=datalocs('smb');
-ncsmb = '/Users/dfelikso/Research/Data/RACMO/RACMO2.3/originalData/downscaled/smb_rec.1958-2017.BN_RACMO2.3p2_FGRN055_GrIS.MM.nc';
-ncrunoff = '/Users/dfelikso/Research/Data/RACMO/RACMO2.3/originalData/downscaled/runoff.1958-2017.BN_RACMO2.3p2_FGRN055_GrIS.MM.nc';
-x3    = ncread(ncrunoff,'lon'); % despite name in netcdf, it isn't actually lat and lon, but projected x y
-y3    = ncread(ncrunoff,'lat');
-smb   = (sum(ncread(ncsmb,'SMB_rec',[1 1 25],[Inf Inf 360]),3)/30)'; %30 years from Jan 1960 - Dec 1989
+%ncsmb = '/Users/dfelikso/Research/Data/RACMO/RACMO2.3/originalData/downscaled/smb_rec.1958-2017.BN_RACMO2.3p2_FGRN055_GrIS.MM.nc';
+%ncrunoff = '/Users/dfelikso/Research/Data/RACMO/RACMO2.3/originalData/downscaled/runoff.1958-2017.BN_RACMO2.3p2_FGRN055_GrIS.MM.nc';
+smb_dir = '/Users/dfelikso/Research/Data/RACMO/RACMO2.3/originalData/downscaled';
+x3    = ncread([smb_dir '/smb_rec.2007.BN_RACMO2.3p2_ERA5_3h_FGRN055.1km.MM.nc'],'x'); % despite name in netcdf, it isn't actually lat and lon, but projected x y
+y3    = ncread([smb_dir '/smb_rec.2007.BN_RACMO2.3p2_ERA5_3h_FGRN055.1km.MM.nc'],'y');
+x_idx = find(x3 >= min(md.mesh.x) & x3 <= max(md.mesh.x));
+y_idx = find(y3 >= min(md.mesh.y) & y3 <= max(md.mesh.y));
 
-%disp('   Loading climate data -- surface temperatures');
-%nctemp=datalocs('temp');
-%tskin = (sum(ncread(nctemp,'tskin',[1 1 1 25],[Inf Inf 1 360]),4)/(30*12))'; %30 years from Jan 1960 - Dec 1989
-%lat = ncread(nctemp,'lat')';        % not sure what the projection is for these data
-%lon = ncread(nctemp,'lon')';        % so import lat lon instead
-%[x4,y4] = ll2xy(lat,lon,+1,45,70);  % find x y on polar stereographic
-%index = BamgTriangulate(x4(:),y4(:)); % create index of x y
-
-disp('   Interpolating climate data');
-md.smb.mass_balance=InterpFromGridToMesh(x3,y3,smb,md.mesh.x,md.mesh.y,0);
-md.smb.mass_balance=(md.smb.mass_balance*md.materials.rho_freshwater/md.materials.rho_ice)/1000; %to get m/yr ice equivalent
-%md.initialization.temperature=InterpFromMeshToMesh2d(index,x4(:),y4(:),tskin(:),md.mesh.x,md.mesh.y);
+md.smb.mass_balance = zeros(md.mesh.numberofvertices+1,1);
+for year = 2007:2020;
+   ncsmb = sprintf('%s/smb_rec.%d.BN_RACMO2.3p2_ERA5_3h_FGRN055.1km.MM.nc', smb_dir, year);
+   smb   = ncread(ncsmb,'smb_rec');
+   for month = 1:12
+      smb_interp = InterpFromGridToMesh(x3,y3,squeeze(smb(:,:,month))',md.mesh.x,md.mesh.y,0);
+      md.smb.mass_balance(1:end-1,end+1) = 12*(smb_interp*md.materials.rho_freshwater/md.materials.rho_ice)/1000; %to get m/yr ice equivalent;
+      md.smb.mass_balance(end,end) = year + month/12;
+   end
+end
+md.smb.mass_balance(:,1) = [];
 
 %ice_temp = evalin('base', 'ice_temp');
 %fprintf([yellow_highlight_start, 'WARNING:' yellow_highlight_end ' Using ' num2str(ice_temp) ' deg C for ice temperature!\n'])
