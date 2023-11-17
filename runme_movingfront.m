@@ -4,6 +4,7 @@ if exist(['./models/' branch '/' branch '.movingfront.' ensembleID '.ssa.tr.sent
 end
 
 % Load model
+md_param = loadmodel(['./models/' branch '/' branch '.param.' ensembleID '.mat']);
 md = loadmodel(['./models/' branch '/' branch '.relaxation.' ensembleID '.ssa.tr']);
  
 % Select the starting point from the relaxation
@@ -25,19 +26,22 @@ end
 
 md.frontalforcings.meltingrate = frontalforcings_meltingrate;
 
+% SMB
+md.smb.mass_balance = md_param.smb.mass_balance;
+
 % Calving
 calving = evalin('base','calving');
 fprintf([yellow_highlight_start 'Using calving: %s' yellow_highlight_end '\n'], calving);
 switch calving
    case 'VM'
      sigma_max = evalin('base', 'sigma_max');
-     fprintf([yellow_highlight_start 'Using sigma_max: %f' yellow_highlight_end '\n'], sigma_max);
+     fprintf([yellow_highlight_start 'Using sigma_max: %10.0f' yellow_highlight_end '\n'], sigma_max);
      md.calving = calvingvonmises();
      md.calving.stress_threshold_groundedice = sigma_max;
      %md.calving.stress_threshold_floatingice = 5e5;
    case 'CD'
      water_height = evalin('base', 'water_height');
-     fprintf([yellow_highlight_start 'Using water_height: %f' yellow_highlight_end '\n'], water_height);
+     fprintf([yellow_highlight_start 'Using water_height: %5.0f' yellow_highlight_end '\n'], water_height);
      md.calving = calvingcrevassedepth();
      md.calving.crevasse_opening_stress = 0;
      md.calving.water_height = water_height * ones(md.mesh.numberofvertices,1);
@@ -80,11 +84,18 @@ md.groundingline.migration='SubelementMigration';
 md.verbose = verbose('solution', true);
 md.transient.requested_outputs = {'default', 'IceVolumeAboveFloatation', 'CalvingFluxLevelset', 'SigmaVM', 'CalvingMeltingrate', 'CalvingCalvingrate'}; %, 'CalvingAblationrate'};
 
+% Start and end times
+md.timestepping.start_time = evalin('base','start_time');
+md.timestepping.final_time = evalin('base','final_time');
+md.timestepping.time_step = 0.01;
+md.settings.output_frequency = 20;
+
 % Solve
 md.miscellaneous.name = 'gris_ssa_tr';
 %md.cluster = load_cluster('oibserve');
 %md.cluster.interactive = 0;
 md.cluster = load_cluster('discover');
+md.cluster.time = 5400;
 md.settings.waitonlock = 0; 9999;
 md.toolkits = toolkits;
 md = solve(md, 'tr');

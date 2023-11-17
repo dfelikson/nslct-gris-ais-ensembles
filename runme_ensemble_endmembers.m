@@ -1,29 +1,45 @@
-% Forcings:
-%  A.) EN4
-%  B.) ASTE
-%  C.) ORAS5
 %
-% Varied model parameters:
-%  1.) calving: von Mises sigma max
+% Sample uncertainty in model parameters:
+%  1.) rheology: rigidity
+%      - bounds: -10% to +10%
+%  2.) friction: friction coefficient
+%      - bounds: -10% to +10%
+%  3.) calving: von Mises sigma max
 %      - bounds: 500 kPa to 1500 kPa
-%  2.) rheology: ice temperature
-%      - bounds: -10% to +10%
-%  3.) friction: friction coefficient
-%      - bounds: -10% to +10%
+%
+
+%
+% TODO: In the future, can sample:
+% Ocean forcing:
+%  a.) EN4
+%  b.) ASTE
+%  c.) ORAS5
+%  d.) ECCO
+%  e.) etc.
+%
+% Atmospheric forcing:
+%  a.) ...
+%
 
 addpath(genpath('/Users/dfelikso/Software/ScriptsAndUtilities/matlab'));
 
-relaxation_start_yr =  0; calving = 'VM'; ensembleGroup = 'K';
-%relaxation_start_yr =  5; calving = 'VM'; ensembleGroup = 'L';
-%relaxation_start_yr = 20; calving = 'VM'; ensembleGroup = 'M';
+relaxation_start_yr =  0; calving = 'VM'; ensembleGroup = 'A';
+%relaxation_start_yr =  5; calving = 'VM'; ensembleGroup = 'B';
+%relaxation_start_yr = 20; calving = 'VM'; ensembleGroup = 'C';
 
 ocean_forcing = 'EN4';
 
+% Start and end time --- historical run for now
+start_time = 2007;
+final_time = 2020;
+
 % Setup end members
 calving = 'VM';
-rheology_end_members  = [0.9     0.9   0.9     0.9   1.1    1.1   1.1     1.1];
-friction_end_members  = [0.9     0.9   1.1     1.1   0.9    0.9   1.1     1.1];
-sigma_max_end_members = [5e5   1.5e6   5e5   1.5e6   5e5  1.5e6   5e5   1.5e6];
+%                       K901    K902    K903    K904    K905     K906    K907    K908
+%                       [lo]                                                     [hi]
+rigidity_end_members  = [0.9     0.9     0.9     0.9     1.1      1.1     1.1     1.1];
+friction_end_members  = [0.9     0.9     1.1     1.1     0.9      0.9     1.1     1.1];
+sigma_max_end_members = [5e5   1.5e6     5e5   1.5e6     5e5    1.5e6     5e5   1.5e6];
 
 [~, branch] = system('git branch --show-current');
 branch = strip(branch);
@@ -39,17 +55,23 @@ for i = 1:length(friction_end_members) %%{{{
    fprintf('\n');
    fprintf([green_text_start 'Running ensembleID: ' ensembleID green_text_end '\n']);
 
-   rheology  = rheology_end_members(i);
+   rigidity  = rigidity_end_members(i);
    friction  = friction_end_members(i);
-   sigma_max = sigma_max_end_members(i);
 
    runme_param;
    runme_inversion;
    runme_relaxation;
-   %runme_relaxation_ensembleprep_from000;
 end
 %%}}}
 
+fprintf('\n');
+s = input('Ready to load relaxation simulations (y/n)? ', 's');
+if strcmpi(s,'n')
+   fprintf('\n');
+   return
+end
+
+% Load relaxation %%{{{
 for i = 1:length(friction_end_members)
    ensembleID = sprintf('%1s9%02d', ensembleGroup, i);
    fprintf('\n');
@@ -57,27 +79,23 @@ for i = 1:length(friction_end_members)
 
    runme_relaxation_loadresultsfromcluster;
 end
+%%}}}
 
-% Run moving front
+% Run moving front --- historical
 for i = 1:length(friction_end_members) %%{{{
    ensembleID = sprintf('%1s9%02d', ensembleGroup, i);
    % Moving front
    fprintf('\n');
    fprintf('Preparing frontalforcings\n');
    if i == 1
+      % Need to load one model for vertices
       md = loadmodel(['./models/' branch '/' branch '.relaxation.' ensembleID '.ssa.tr']);
-
-      % Start and end time setup
-      md.timestepping.time_step=0.01; % need to adjust for CFL
-      md.timestepping.start_time=2007; %years
-      md.timestepping.final_time=2020; %years
-      md.settings.output_frequency=20; % output every Nth timestep
 
       % Slater and Straneo (2022) frontal forcings -- scaled with bed depth
       [md_basins, twglaciers] = parameterize_slater_straneo_submelt(md);
       t = eval(['twglaciers(1).ocean.' ocean_forcing '.t']);
-      idx_start = find(t >= md.timestepping.start_time, 1, 'first');
-      idx_final = find(t <= md.timestepping.final_time, 1, 'last');
+      idx_start = find(t >= start_time, 1, 'first');
+      idx_final = find(t <= final_time, 1, 'last');
       t = t(idx_start:idx_final);
       fprintf([yellow_highlight_start 'Using ocean forcing: %s' yellow_highlight_end '\n'], ocean_forcing);
       frontalforcings_meltingrate = 0 * ones(md.mesh.numberofvertices+1,length(t));
@@ -109,9 +127,28 @@ for i = 1:length(friction_end_members) %%{{{
    end
 
    fprintf('\n');
-   fprintf([green_text_start 'Running moving front for ensembleID: ' ensembleID green_text_end '\n']);
+   fprintf([green_text_start 'Running movingfront for ensembleID: ' ensembleID green_text_end '\n']);
+
+   sigma_max = sigma_max_end_members(i);
 
    runme_movingfront;
+end
+%%}}}
+
+% Load movingfront --- historical %%{{{
+fprintf('\n');
+s = input('Ready to load movingfront simulations (y/n)? ', 's');
+if strcmpi(s,'n')
+   fprintf('\n');
+   return
+end
+
+for i = 1:length(friction_end_members)
+   ensembleID = sprintf('%1s9%02d', ensembleGroup, i);
+   fprintf('\n');
+   fprintf([green_text_start 'Loading movingfront for ensembleID: ' ensembleID green_text_end '\n']);
+
+   runme_movingfront_loadresultsfromcluster;
 end
 %%}}}
 return

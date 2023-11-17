@@ -64,8 +64,8 @@ md.mask.ice_levelset         = -1*ones(md.mesh.numberofvertices,1);
 md.mask.ocean_levelset       = +1*ones(md.mesh.numberofvertices,1);
 mask = interpBedmachineGreenland(md.mesh.x,md.mesh.y,'mask');
 % 0 = ocean, 1 = ice-free land, 2 = grounded ice, 3 = floating ice, 4 = non-Greenland land
-%pos = find(mask <= 1 | mask == 4);
-pos = find(mask <= 1 | (md.mask.ice_levelset == -1 & md.mesh.vertexonboundary));
+pos = find(mask <= 1 | mask == 4);
+%pos = find(mask <= 1 | (md.mask.ice_levelset == -1 & md.mesh.vertexonboundary));
 md.mask.ice_levelset(pos) = 1;
 % Assign floating ice in grounded ice mask
 baf = md.geometry.surface-1/(1-di)*md.geometry.surface;
@@ -77,14 +77,14 @@ disp('    -> reinitializing levelsets')
 md.mask.ice_levelset   = reinitializelevelset(md, md.mask.ice_levelset);
 md.mask.ocean_levelset = reinitializelevelset(md, md.mask.ocean_levelset);
 
-% NOTE: remove isolated small patches of ice that are disconnected from the large ice sheet mass
-contours = isoline(md, md.mask.ice_levelset, 'value', 0);
-expwrite(contours(1), 'temp.exp')
-levelsetfunction = exp2levelsetfunction(md, 'temp.exp');
-delete('temp.exp');
-%pos = find(levelsetfunction > 0 & md.mask.ice_levelset < 0);
-md.mask.ice_levelset = levelsetfunction;
-% NOTE
+% % NOTE: remove isolated small patches of ice that are disconnected from the large ice sheet mass
+% contours = isoline(md, md.mask.ice_levelset, 'value', 0);
+% expwrite(contours(1), 'temp.exp')
+% levelsetfunction = exp2levelsetfunction(md, 'temp.exp');
+% delete('temp.exp');
+% %pos = find(levelsetfunction > 0 & md.mask.ice_levelset < 0);
+% md.mask.ice_levelset = levelsetfunction;
+% % NOTE
 
 disp('  Set inversion method to M1QN3');
 md.inversion=m1qn3inversion();
@@ -149,6 +149,16 @@ md.initialization.temperature = InterpFromMeshToMesh2d(md_nias.mesh.elements, md
 % fileGHF = fopen(datalocs('ghf'),'r');
 % % % Format for each line of text:
 %     %   column1: double (%f)
+md_nias = loadmodel('models/nias_ensemble_setup/gris.cmmtt.control_drag.ssa.sb');
+md.initialization.temperature = InterpFromMeshToMesh2d(md_nias.mesh.elements, md_nias.mesh.x, md_nias.mesh.y, md_nias.initialization.temperature, md.mesh.x, md.mesh.y);
+
+% % GHF data
+% disp('   Loading GHF data -- Martos et al 2018');
+% % read table from text file
+% % % Open the text file.
+% fileGHF = fopen(datalocs('ghf'),'r');
+% % % Format for each line of text:
+%     %   column1: double (%f)
 %     %	column2: double (%f)
 %     %   column3: double (%f)
 % formatSpec = '%f%f%f%[^\n\r]';
@@ -184,9 +194,9 @@ disp('   Construct ice rheological properties');
 md.materials.rheology_n=3*ones(md.mesh.numberofelements,1);
 %md.materials.rheology_B=paterson(md.initialization.temperature); %initial guess of temperature comes from surface temperature
 md.materials.rheology_B=cuffey(md.initialization.temperature);
-rheology = evalin('base','rheology');
-fprintf([yellow_highlight_start '      -> adjusting rheology by %+3.1f%%' yellow_highlight_end '\n'], rheology);
-md.materials.rheology_B = rheology .* md.materials.rheology_B;
+rigidity = evalin('base','rigidity');
+fprintf([yellow_highlight_start '      -> adjusting rigidity by %+3.1f%%' yellow_highlight_end '\n'], 100 * (rigidity-1));
+md.materials.rheology_B = rigidity .* md.materials.rheology_B;
 
 disp('   Set Pressure');
 md.initialization.pressure=md.materials.rho_ice*md.constants.g*md.geometry.thickness;
@@ -206,29 +216,51 @@ type_elements( ice_elements & ~ocean_elements) = 1; % grounded ice
 type_elements( ice_elements &  ocean_elements) = 2; % floating ice
 type_elements(~ice_elements & ~ocean_elements) = 3; % rock
 
-% Find elements that are connected to one another
-% grounded <-> rock
-md.mesh.vertexconnectivity=NodeConnectivity(md.mesh.elements,md.mesh.numberofvertices);
-md.mesh.elementconnectivity=ElementConnectivity(md.mesh.elements,md.mesh.vertexconnectivity);
+% % Find elements that are connected to one another
+% % grounded <-> rock
+% md.mesh.vertexconnectivity=NodeConnectivity(md.mesh.elements,md.mesh.numberofvertices);
+% md.mesh.elementconnectivity=ElementConnectivity(md.mesh.elements,md.mesh.vertexconnectivity);
+% 
+% pos_element = zeros(md.mesh.numberofelements,1);
+% for i = 1:size(md.mesh.elementconnectivity,1)
+%    elementconnectivity = md.mesh.elementconnectivity(i,:);
+%    elementconnectivity(elementconnectivity==0) = [];
+%    if any(type_elements(elementconnectivity,:) == 1) & any(type_elements(elementconnectivity,:)==3)
+%       pos_element(i) = 1;
+%    end
+% end
+% pos_vertex = unique(md.mesh.elements(find(pos_element),:));
+% 
+% disp('   Single point constraints');
+% md.stressbalance.spcvx=NaN*ones(md.mesh.numberofvertices,1);
+% md.stressbalance.spcvy=NaN*ones(md.mesh.numberofvertices,1);
+% md.stressbalance.spcvz=NaN*ones(md.mesh.numberofvertices,1);
 
-pos_element = zeros(md.mesh.numberofelements,1);
-for i = 1:size(md.mesh.elementconnectivity,1)
-   elementconnectivity = md.mesh.elementconnectivity(i,:);
-   elementconnectivity(elementconnectivity==0) = [];
-   if any(type_elements(elementconnectivity,:) == 1) & any(type_elements(elementconnectivity,:)==3)
-      pos_element(i) = 1;
-   end
-end
-pos_vertex = unique(md.mesh.elements(find(pos_element),:));
+% md.stressbalance.spcvx(pos_vertex,1)=md.inversion.vx_obs(pos_vertex,1);
+% md.stressbalance.spcvy(pos_vertex,1)=md.inversion.vy_obs(pos_vertex,1);
+% md.stressbalance.spcvz(pos_vertex,1)=0;
+% md.stressbalance.referential=NaN*ones(md.mesh.numberofvertices,6);
+% md.stressbalance.loadingforce=0*ones(md.mesh.numberofvertices,3);
 
-disp('   Single point constraints');
+% What Mathieu does:
+disp('   Set Boundary conditions');
 md.stressbalance.spcvx=NaN*ones(md.mesh.numberofvertices,1);
 md.stressbalance.spcvy=NaN*ones(md.mesh.numberofvertices,1);
 md.stressbalance.spcvz=NaN*ones(md.mesh.numberofvertices,1);
-
-md.stressbalance.spcvx(pos_vertex,1)=md.inversion.vx_obs(pos_vertex,1);
-md.stressbalance.spcvy(pos_vertex,1)=md.inversion.vy_obs(pos_vertex,1);
-md.stressbalance.spcvz(pos_vertex,1)=0;
 md.stressbalance.referential=NaN*ones(md.mesh.numberofvertices,6);
 md.stressbalance.loadingforce=0*ones(md.mesh.numberofvertices,3);
+pos=find((md.mask.ice_levelset<0).*(md.mesh.vertexonboundary));
+% % TEMPORARY
+% filename = ['Exp/HEL_BC_temporary.exp'];
+% pos = find(ContourToNodes(md.mesh.x,md.mesh.y,filename,2) .* md.mesh.vertexonboundary);
+md.stressbalance.spcvx(pos)=md.initialization.vx(pos);
+md.stressbalance.spcvy(pos)=md.initialization.vy(pos);
+md.stressbalance.spcvz(pos)=0;
+
+% Constrain where there's inflow
+pos = ~outflow(md) & md.mesh.vertexonboundary;
+
+% Thickness constraint
+md.masstransport.spcthickness=NaN*ones(md.mesh.numberofvertices,1);
+md.masstransport.spcthickness(pos)=md.geometry.thickness(pos);
 
