@@ -1,4 +1,4 @@
-function plot_mass_change(mds, ensembleIDs, plot_imbie)
+function plot_mass_change(mds, ensembleIDs, plot_imbie, plot_mougn)
    figure; hold on;
    h_lines = [];
    for i = 1:numel(mds)
@@ -23,16 +23,31 @@ function plot_mass_change(mds, ensembleIDs, plot_imbie)
       mass_imbie = imbie_data(145:end,4);
       uncr_imbie = imbie_data(145:end,5);
       
-      [~, idx_start] = min(abs(time_imbie-time(1)));
-      [~, idx_end  ] = min(abs(time_imbie-time(end)));
-      time_imbie = time_imbie(idx_start:idx_end);
-      mass_imbie = mass_imbie(idx_start:idx_end)-mass_imbie(idx_start);
-      rate_imbie = diff(mass_imbie)./diff(time_imbie);
-      u = uncr_imbie(idx_start:idx_end);
-      plot(time_imbie, mass_imbie, 'k-', 'LineWidth', 2)
+      time_obs = time_imbie;
+      mass_obs = mass_imbie;
+      uncr_obs = uncr_imbie;
+   end
+   if plot_mougn
+      mougn_data = xlsread('/Users/dfelikso/Zotero/storage/M89GPQ4A/Proceedings_of_the_National_Academy_of_Sciences_2019_Mouginot.xlsx', '(2) MB_GIS', 'AY31:BJ39');
+      time_mougn = mougn_data(1,:);
+      mass_mougn = mougn_data(4,:);
+      
+      time_obs = time_mougn;
+      mass_obs = cumsum(mass_mougn);
+   end
+
+   if plot_imbie | plot_mougn
+      [~, idx_start] = min(abs(time_obs-time(1)));
+      [~, idx_end  ] = min(abs(time_obs-time(end)));
+      time_obs = time_obs(idx_start:idx_end);
+      mass_obs = mass_obs(idx_start:idx_end) - mass_obs(idx_start);
+      %rate_imbie = diff(mass_imbie)./diff(time_imbie);
+      %u = uncr_imbie(idx_start:idx_end);
+      plot(time_obs, mass_obs, 'k-', 'LineWidth', 2)
       %patch([t fliplr(t)], m+[u fliplr(-u)], [0.1 0.1 0.1])
       
-      legend_str{end+1} = 'IMBIE';
+      legend_str{end+1} = 'observations';
+
    end
 
    legend(legend_str)
