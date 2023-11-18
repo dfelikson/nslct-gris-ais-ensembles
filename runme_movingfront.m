@@ -82,7 +82,7 @@ md.transient.isoceancoupling=0;
 md.groundingline.migration='SubelementMigration';
  
 md.verbose = verbose('solution', true);
-md.transient.requested_outputs = {'default', 'IceVolumeAboveFloatation', 'CalvingFluxLevelset', 'SigmaVM', 'CalvingMeltingrate', 'CalvingCalvingrate'}; %, 'CalvingAblationrate'};
+md.transient.requested_outputs = {'default', 'IceVolumeAboveFloatation', 'CalvingFluxLevelset', 'SigmaVM', 'CalvingMeltingrate', 'CalvingCalvingrate', 'SmbMassBalance', 'TotalSmb'}; %, 'CalvingAblationrate'};
 
 % Start and end times
 md.timestepping.start_time = evalin('base','start_time');

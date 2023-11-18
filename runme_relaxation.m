@@ -81,7 +81,7 @@ md.friction.coefficient = friction * md.friction.coefficient;
 
 % Outputs
 md.verbose = verbose('solution', true);
-md.transient.requested_outputs = {'default', 'IceVolumeAboveFloatation'}; %, 'CalvingAblationrate'};
+md.transient.requested_outputs = {'default', 'IceVolumeAboveFloatation', 'SmbMassBalance', 'TotalSmb'}; %, 'CalvingAblationrate'};
 
 % Solve
 %md.cluster = load_cluster('oibserve');
