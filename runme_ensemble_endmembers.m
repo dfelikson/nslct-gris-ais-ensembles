@@ -35,11 +35,11 @@ final_time = 2020;
 
 % Setup end members
 calving = 'VM';
-%                       K901    K902    K903    K904    K905     K906    K907    K908
-%                       [lo]                                                     [hi]
-rigidity_end_members  = [0.9     0.9     0.9     0.9     1.1      1.1     1.1     1.1];
-friction_end_members  = [0.9     0.9     1.1     1.1     0.9      0.9     1.1     1.1];
-sigma_max_end_members = [5e5   1.5e6     5e5   1.5e6     5e5    1.5e6     5e5   1.5e6];
+%                       A900    A901    A902    A903    A904    A905     A906    A907    A908
+%                               [lo]                                                     [hi]
+rigidity_end_members  = [1.0     0.9     0.9     0.9     0.9     1.1      1.1     1.1     1.1];
+friction_end_members  = [1.0     0.9     0.9     1.1     1.1     0.9      0.9     1.1     1.1];
+sigma_max_end_members = [1e6     5e5   1.5e6     5e5   1.5e6     5e5    1.5e6     5e5   1.5e6];
 
 [~, branch] = system('git branch --show-current');
 branch = strip(branch);
@@ -50,13 +50,13 @@ end
 % Run
 % mesh / param / inversion / relaxation
 runme_mesh;
-for i = 1:length(friction_end_members) %%{{{
+for i = 0:length(friction_end_members)-1 %%{{{
    ensembleID = sprintf('%1s9%02d', ensembleGroup, i);
    fprintf('\n');
    fprintf([green_text_start 'Running ensembleID: ' ensembleID green_text_end '\n']);
 
-   rigidity  = rigidity_end_members(i);
-   friction  = friction_end_members(i);
+   rigidity  = rigidity_end_members(i+1);
+   friction  = friction_end_members(i+1);
 
    runme_param;
    runme_inversion;
@@ -72,7 +72,7 @@ if strcmpi(s,'n')
 end
 
 % Load relaxation %%{{{
-for i = 1:length(friction_end_members)
+for i = 0:length(friction_end_members)-1
    ensembleID = sprintf('%1s9%02d', ensembleGroup, i);
    fprintf('\n');
    fprintf([green_text_start 'Loading relaxation for ensembleID: ' ensembleID green_text_end '\n']);
@@ -82,12 +82,12 @@ end
 %%}}}
 
 % Run moving front --- historical
-for i = 1:length(friction_end_members) %%{{{
+for i = 0:length(friction_end_members)-1 %%{{{
    ensembleID = sprintf('%1s9%02d', ensembleGroup, i);
    % Moving front
    fprintf('\n');
    fprintf('Preparing frontalforcings\n');
-   if i == 1
+   if i == 0
       % Need to load one model for vertices
       md = loadmodel(['./models/' branch '/' branch '.relaxation.' ensembleID '.ssa.tr']);
 
@@ -129,7 +129,7 @@ for i = 1:length(friction_end_members) %%{{{
    fprintf('\n');
    fprintf([green_text_start 'Running movingfront for ensembleID: ' ensembleID green_text_end '\n']);
 
-   sigma_max = sigma_max_end_members(i);
+   sigma_max = sigma_max_end_members(i+1);
 
    runme_movingfront;
 end
@@ -143,7 +143,7 @@ if strcmpi(s,'n')
    return
 end
 
-for i = 1:length(friction_end_members)
+for i = 0:length(friction_end_members)-1
    ensembleID = sprintf('%1s9%02d', ensembleGroup, i);
    fprintf('\n');
    fprintf([green_text_start 'Loading movingfront for ensembleID: ' ensembleID green_text_end '\n']);
