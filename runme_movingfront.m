@@ -27,7 +27,7 @@ end
 md.frontalforcings.meltingrate = frontalforcings_meltingrate;
 
 % SMB
-md.smb.mass_balance = md_param.smb.mass_balance;
+md.smb = md_param.smb;
 
 % Calving
 calving = evalin('base','calving');
@@ -66,7 +66,7 @@ md.transient.isgroundingline = 1;
 
 % set which components of the transient solution to run
 md.inversion.iscontrol = 0;
-md.transient.issmb=0;
+md.transient.issmb=1;
 md.transient.ismasstransport=1;
 md.transient.isstressbalance=1;
 md.transient.isthermal=0;
@@ -82,7 +82,7 @@ md.transient.isoceancoupling=0;
 md.groundingline.migration='SubelementMigration';
  
 md.verbose = verbose('solution', true);
-md.transient.requested_outputs = {'default', 'IceVolumeAboveFloatation', 'CalvingFluxLevelset', 'SigmaVM', 'CalvingMeltingrate', 'CalvingCalvingrate'}; %, 'CalvingAblationrate'};
+md.transient.requested_outputs = {'default', 'IceVolumeAboveFloatation', 'CalvingFluxLevelset', 'SigmaVM', 'CalvingMeltingrate', 'CalvingCalvingrate', 'SmbMassBalance', 'TotalSmb'}; %, 'CalvingAblationrate'};
 
 % Start and end times
 md.timestepping.start_time = evalin('base','start_time');
