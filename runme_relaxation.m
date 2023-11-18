@@ -16,12 +16,15 @@ md.settings.output_frequency=20; % output every Nth timestep
 md.friction.coefficient = md.results.StressbalanceSolution.FrictionCoefficient;
 
 % For relaxation, average the SMB over the historical period
-smb_mean = mean(md.smb.mass_balance(1:end-1,:),2);
-md.smb.mass_balance = smb_mean;
+%smb_mean = mean(md.smb.mass_balance(1:end-1,:),2);
+%md.smb.mass_balance = smb_mean;
+md.smb.smbref = mean(md.smb.smbref(1:end-1,:),2);
+md.smb.b_pos = mean(md.smb.b_pos(1:end-1,:),2);
+md.smb.b_neg = mean(md.smb.b_neg(1:end-1,:),2);
 
 % set which components of the transient solution to run
 md.inversion.iscontrol = 0;
-md.transient.issmb=0;
+md.transient.issmb=1;
 md.transient.ismasstransport=1;
 md.transient.isstressbalance=1;
 md.transient.isthermal=0;
@@ -81,7 +84,7 @@ md.friction.coefficient = friction * md.friction.coefficient;
 
 % Outputs
 md.verbose = verbose('solution', true);
-md.transient.requested_outputs = {'default', 'IceVolumeAboveFloatation'}; %, 'CalvingAblationrate'};
+md.transient.requested_outputs = {'default', 'IceVolumeAboveFloatation', 'SmbMassBalance', 'TotalSmb'}; %, 'CalvingAblationrate'};
 
 % Solve
 %md.cluster = load_cluster('oibserve');

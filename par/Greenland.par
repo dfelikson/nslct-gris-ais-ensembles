@@ -110,37 +110,76 @@ md.initialization.vz = zeros(md.mesh.numberofvertices,1);
 md.initialization.vel= md.inversion.vel_obs;
 clear x2 y2 velx vely; 
 
-% Climate data
-
+% Climate data %%{{{
 disp('   Loading climate data -- SMB');
-%ncsmb=datalocs('smb');
-%ncsmb = '/Users/dfelikso/Research/Data/RACMO/RACMO2.3/originalData/downscaled/smb_rec.1958-2017.BN_RACMO2.3p2_FGRN055_GrIS.MM.nc';
-%ncrunoff = '/Users/dfelikso/Research/Data/RACMO/RACMO2.3/originalData/downscaled/runoff.1958-2017.BN_RACMO2.3p2_FGRN055_GrIS.MM.nc';
-smb_dir = '/Users/dfelikso/Research/Data/RACMO/RACMO2.3/originalData/downscaled';
-x3    = ncread([smb_dir '/smb_rec.2007.BN_RACMO2.3p2_ERA5_3h_FGRN055.1km.MM.nc'],'x'); % despite name in netcdf, it isn't actually lat and lon, but projected x y
-y3    = ncread([smb_dir '/smb_rec.2007.BN_RACMO2.3p2_ERA5_3h_FGRN055.1km.MM.nc'],'y');
-x_idx = find(x3 >= min(md.mesh.x) & x3 <= max(md.mesh.x));
-y_idx = find(y3 >= min(md.mesh.y) & y3 <= max(md.mesh.y));
+% %ncsmb=datalocs('smb');
+% %ncsmb = '/Users/dfelikso/Research/Data/RACMO/RACMO2.3/originalData/downscaled/smb_rec.1958-2017.BN_RACMO2.3p2_FGRN055_GrIS.MM.nc';
+% %ncrunoff = '/Users/dfelikso/Research/Data/RACMO/RACMO2.3/originalData/downscaled/runoff.1958-2017.BN_RACMO2.3p2_FGRN055_GrIS.MM.nc';
+% smb_dir = '/Users/dfelikso/Research/Data/RACMO/RACMO2.3/originalData/downscaled';
+% x3    = ncread([smb_dir '/smb_rec.2007.BN_RACMO2.3p2_ERA5_3h_FGRN055.1km.MM.nc'],'x'); % despite name in netcdf, it isn't actually lat and lon, but projected x y
+% y3    = ncread([smb_dir '/smb_rec.2007.BN_RACMO2.3p2_ERA5_3h_FGRN055.1km.MM.nc'],'y');
+% 
+% md.smb.mass_balance = zeros(md.mesh.numberofvertices+1,1);
+% for year = 2006:2020;
+%    ncsmb = sprintf('%s/smb_rec.%d.BN_RACMO2.3p2_ERA5_3h_FGRN055.1km.MM.nc', smb_dir, year);
+%    smb   = ncread(ncsmb,'smb_rec');
+%       
+%    smb_interp = InterpFromGridToMesh(x3,y3,sum(smb,3)',md.mesh.x,md.mesh.y,0);
+%    md.smb.mass_balance(1:end-1,end+1) = (smb_interp*md.materials.rho_freshwater/md.materials.rho_ice)/1000; %convert from mm w.e. per yr to m per yr ice equivalent;
+%    md.smb.mass_balance(end,end) = year + 0.5;
+% end
+% md.smb.mass_balance(:,1) = [];
+% 
+% %ice_temp = evalin('base', 'ice_temp');
+% %fprintf([yellow_highlight_start, 'WARNING:' yellow_highlight_end ' Using ' num2str(ice_temp) ' deg C for ice temperature!\n'])
+% %md.initialization.temperature = ice_temp * ones(md.mesh.numberofvertices,1) + 273.15;
+% clear x3 y3 smb lat lon x4 y4 index tskin;
 
-md.smb.mass_balance = zeros(md.mesh.numberofvertices+1,1);
-for year = 2007:2020;
-   ncsmb = sprintf('%s/smb_rec.%d.BN_RACMO2.3p2_ERA5_3h_FGRN055.1km.MM.nc', smb_dir, year);
-   smb   = ncread(ncsmb,'smb_rec');
-   for month = 1:12
-      smb_interp = InterpFromGridToMesh(x3,y3,squeeze(smb(:,:,month))',md.mesh.x,md.mesh.y,0);
-      md.smb.mass_balance(1:end-1,end+1) = 12*(smb_interp*md.materials.rho_freshwater/md.materials.rho_ice)/1000; %to get m/yr ice equivalent;
-      md.smb.mass_balance(end,end) = year + month/12;
-   end
-end
-md.smb.mass_balance(:,1) = [];
+disp('   apply SMB forcing');
+% turn on smb solution in transient
+md.transient.issmb = 1;
+% update with the SMBgradients class
+% to allow elevation feedback
+md.smb = SMBgradients();
 
-%ice_temp = evalin('base', 'ice_temp');
-%fprintf([yellow_highlight_start, 'WARNING:' yellow_highlight_end ' Using ' num2str(ice_temp) ' deg C for ice temperature!\n'])
-%md.initialization.temperature = ice_temp * ones(md.mesh.numberofvertices,1) + 273.15;
-clear x3 y3 smb lat lon x4 y4 index tskin;
+% load reference smb (the 1960-1989 mean)
+smb_ref = load_smb_ref(md);
 
-md_nias = loadmodel('models/nias_ensemble_setup/gris.cmmtt.control_drag.ssa.sb');
-md.initialization.temperature = InterpFromMeshToMesh2d(md_nias.mesh.elements, md_nias.mesh.x, md_nias.mesh.y, md_nias.initialization.temperature, md.mesh.x, md.mesh.y);
+% convert smb_ref from m/yr ice to mm/yr w.e.
+% because mm/yr required by SMBgradients()
+smb_ref = (smb_ref*1000*md.materials.rho_ice)/md.materials.rho_freshwater;
+
+cmip = 'MIROC5-rcp85';
+startyr = 2006;
+endyr = 2020;
+
+% load the time-varying SMB anomaly
+smb_anomaly = load_smb_anomaly(md,cmip,startyr,endyr);
+% convert kg m^-2 s^-1 (i.e. mm/s w.e.) to mm/yr w.e.
+% using 31556926 s/yr as used by ISMIP6 (compared to md.constants.yts)
+% kg m^-2 = mm w.e. (for md.matertials.rho_freshwater)
+smb_anomaly = smb_anomaly*31556926;
+% years
+smb_anomaly_years = startyr:endyr;
+
+% reference SMB [mm/yr water equiv]
+warning('check the units on smb_ref and smb_anomaly!')
+smbref = [smb_ref + smb_anomaly; smb_anomaly_years + 0.5];
+% input into model
+md.smb.smbref = smbref;
+
+% reference surface [m] -- surface at the end of the historical run
+md.smb.href = md.geometry.surface; % reinitialised surface
+
+% dSMB/dz [ (mm/yr water equiv)/(m) ]
+dSMBdz = load_dSMBdz(md,cmip,startyr,endyr);
+% convert from (kg m^-2 s^-1)/m to (mm/yr w.e.)/m
+dSMBdz = dSMBdz*31556926;
+% years
+dSMBdz_years = startyr:endyr;
+% input into model
+md.smb.b_pos = [dSMBdz; dSMBdz_years];
+md.smb.b_neg = md.smb.b_pos;
 
 % % GHF data
 % disp('   Loading GHF data -- Martos et al 2018');
@@ -149,6 +188,8 @@ md.initialization.temperature = InterpFromMeshToMesh2d(md_nias.mesh.elements, md
 % fileGHF = fopen(datalocs('ghf'),'r');
 % % % Format for each line of text:
 %     %   column1: double (%f)
+%%}}}
+
 md_nias = loadmodel('models/nias_ensemble_setup/gris.cmmtt.control_drag.ssa.sb');
 md.initialization.temperature = InterpFromMeshToMesh2d(md_nias.mesh.elements, md_nias.mesh.x, md_nias.mesh.y, md_nias.initialization.temperature, md.mesh.x, md.mesh.y);
 
