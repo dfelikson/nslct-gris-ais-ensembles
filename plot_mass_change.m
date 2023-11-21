@@ -1,12 +1,18 @@
-function plot_mass_change(mds, ensembleIDs, plot_imbie, plot_mougn)
+function plot_mass_change(mds, ensembleIDs, colors, plot_imbie, plot_mougn)
    figure; hold on;
    h_lines = [];
    for i = 1:numel(mds)
-      time = [mds{i}.results.TransientSolution(:).time];
-      vol  = [mds{i}.results.TransientSolution(:).IceVolumeAboveFloatation]; % m3
-      mass = vol * mds{i}.materials.rho_ice * 1e-12; % Gt
-   
-      plot(time, mass-mass(1), 'LineWidth', 2);
+      time = mds(i).historical.time;
+      vol  = mds(i).historical.IceVolumeAboveFloatation; % m3
+      mass = vol * 917 * 1e-12; % Gt
+      mass_init = mass(2);
+      plot(time, mass-mass_init, 'color', colors(i,:), 'LineWidth', 2);
+
+      time = mds(i).proj.time;
+      vol  = mds(i).proj.IceVolumeAboveFloatation; % m3
+      mass = vol * 917 * 1e-12; % Gt
+      plot(time, mass-mass_init, 'color', colors(i,:), 'LineWidth', 2, 'HandleVisibility', 'off');
+      
       %if i == idx_best
       %   h_lines(end+1) = plot(time, mass-mass(1), 'Color', 'r', 'LineWidth', 3);
       %else
@@ -37,10 +43,10 @@ function plot_mass_change(mds, ensembleIDs, plot_imbie, plot_mougn)
    end
 
    if plot_imbie | plot_mougn
-      [~, idx_start] = min(abs(time_obs-time(1)));
-      [~, idx_end  ] = min(abs(time_obs-time(end)));
-      time_obs = time_obs(idx_start:idx_end);
-      mass_obs = mass_obs(idx_start:idx_end) - mass_obs(idx_start);
+      %[~, idx_start] = min(abs(time_obs-time(1)));
+      %[~, idx_end  ] = min(abs(time_obs-time(end)));
+      %time_obs = time_obs(idx_start:idx_end);
+      %mass_obs = mass_obs(idx_start:idx_end) - mass_obs(idx_start);
       %rate_imbie = diff(mass_imbie)./diff(time_imbie);
       %u = uncr_imbie(idx_start:idx_end);
       plot(time_obs, mass_obs, 'k-', 'LineWidth', 2)

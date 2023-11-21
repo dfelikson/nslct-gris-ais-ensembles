@@ -4,32 +4,48 @@ branch = strip(branch);
 
 % Load models
 ensembleIDs = {};
-for i = 1:8
-   ensembleIDs{i} = sprintf('A9%02.0f', i);
+for i = 0:8
+   ensembleIDs{i+1} = sprintf('A9%02.0f', i);
 end
 
-models = {};
+mds = struct();
 for i = 1:numel(ensembleIDs)
    %models{i} = ['models/' branch '/' branch '.relaxation.' ensembleIDs{i} '.ssa.tr'];
-   models{i} = ['models/' branch '/' branch '.movingfront.' ensembleIDs{i} '.ssa.tr'];
-end
-model_names = ensembleIDs;
 
-mds = {};
-for i = 1:numel(ensembleIDs)
-   if exist(models{i}, 'file')
-      fprintf('Loading model %s\n', models{i})
-      mds{end+1} = loadmodel(models{i});
+   % Load historical %%{{{
+   model_name = ['models/' branch '/' branch '.movingfront.' ensembleIDs{i} '.ssa.tr'];
+   if exist(model_name, 'file')
+      fprintf('Loading model %s\n', model_name)
+      md = loadmodel(model_name);
    else
-      fprintf('Model %s not found. Skipping.\n', models{i})
+      fprintf('Model %s not found. Skipping.\n', model_name)
    end
-end
+   %%}}}
 
-colors = cbrewer('qual', 'Set2', numel(models));
+   % Pull relevant fields
+   mds(i).historical.time = [md.results.TransientSolution(:).time];
+   mds(i).historical.IceVolumeAboveFloatation = [md.results.TransientSolution(:).IceVolumeAboveFloatation];
+   
+   % Load projection %%{{{
+   model_name = ['models/' branch '/' branch '.proj.' ensembleIDs{i} '.ssa.tr'];
+   if exist(model_name, 'file')
+      fprintf('Loading model %s\n', model_name)
+      md = loadmodel(model_name);
+   else
+      fprintf('Model %s not found. Skipping.\n', model_name)
+   end
+   %%}}}
+
+   % Pull relevant fields
+   mds(i).proj.time = [md.results.TransientSolution(:).time];
+   mds(i).proj.IceVolumeAboveFloatation = [md.results.TransientSolution(:).IceVolumeAboveFloatation];
+   
+end
+colors = cbrewer('qual', 'Dark2', numel(mds));
 styles = {'-', '--'};
 % Plot mass change
 %plot_mass_change(mds, ensembleIDs, false);
-plot_mass_change(mds, ensembleIDs, false, true);
+plot_mass_change(mds, ensembleIDs, colors, false, true);
 return
 
 % Plot LHS parameters
