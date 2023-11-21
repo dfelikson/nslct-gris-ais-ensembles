@@ -29,9 +29,10 @@ relaxation_start_yr =  0; calving = 'VM'; ensembleGroup = 'A';
 
 ocean_forcing = 'EN4';
 
-% Start and end time --- historical run for now
-start_time = 2007;
-final_time = 2020;
+% Start and end times
+start_time_hist = 2007;
+final_time_hist = 2020;
+final_time_proj = 2100;
 
 % Setup end members
 calving = 'VM';
@@ -82,49 +83,9 @@ end
 %%}}}
 
 % Run moving front --- historical
+frontalforcings_ready = false;
 for i = 0:length(friction_end_members)-1 %%{{{
    ensembleID = sprintf('%1s9%02d', ensembleGroup, i);
-   % Moving front
-   fprintf('\n');
-   fprintf('Preparing frontalforcings\n');
-   if i == 0
-      % Need to load one model for vertices
-      md = loadmodel(['./models/' branch '/' branch '.relaxation.' ensembleID '.ssa.tr']);
-
-      % Slater and Straneo (2022) frontal forcings -- scaled with bed depth
-      [md_basins, twglaciers] = parameterize_slater_straneo_submelt(md);
-      t = eval(['twglaciers(1).ocean.' ocean_forcing '.t']);
-      idx_start = find(t >= start_time, 1, 'first');
-      idx_final = find(t <= final_time, 1, 'last');
-      t = t(idx_start:idx_final);
-      fprintf([yellow_highlight_start 'Using ocean forcing: %s' yellow_highlight_end '\n'], ocean_forcing);
-      frontalforcings_meltingrate = 0 * ones(md.mesh.numberofvertices+1,length(t));
-      frontalforcings_meltingrate(end,:) = t;
-      for i_twg = 1:numel(twglaciers)
-         pos = find(md_basins == twglaciers(i_twg).basin_num);
-         if ~isempty(pos)
-            bed_min = min(md.geometry.bed(pos));
-
-            z = eval(['twglaciers(i_twg).ocean.' ocean_forcing '.z']);
-            Q_sg = interp1(twglaciers(i_twg).runoff.RACMO.t, twglaciers(i_twg).runoff.RACMO.Q, t) * (86400/1000000);
-            TF = eval(['twglaciers(i_twg).ocean.' ocean_forcing '.TF']);
-            TF = TF(:,idx_start:idx_final);
-            if min(z) > bed_min;
-               z(end+1) = bed_min;
-               TF(end+1,:) = TF(end,:);
-            end
-
-            TF_interp = interp1(z, TF, md.geometry.bed(pos));
-            frontalforcings_meltingrate(pos,:) = ((3e-4 .* -md.geometry.bed(pos) .* Q_sg.^0.39 + 0.15) .* TF_interp.^1.18) .* 365;
-         end
-      end
-
-      % Cleanup
-      pos = find(md.geometry.bed > 0);
-      frontalforcings_meltingrate(pos,:) = 0;
-      pos = find(isnan(frontalforcings_meltingrate));
-      frontalforcings_meltingrate(pos) = 0;
-   end
 
    fprintf('\n');
    fprintf([green_text_start 'Running movingfront for ensembleID: ' ensembleID green_text_end '\n']);
@@ -134,7 +95,6 @@ for i = 0:length(friction_end_members)-1 %%{{{
    runme_movingfront;
 end
 %%}}}
-
 % Load movingfront --- historical %%{{{
 fprintf('\n');
 s = input('Ready to load movingfront simulations (y/n)? ', 's');
@@ -149,6 +109,36 @@ for i = 0:length(friction_end_members)-1
    fprintf([green_text_start 'Loading movingfront for ensembleID: ' ensembleID green_text_end '\n']);
 
    runme_movingfront_loadresultsfromcluster;
+end
+%%}}}
+
+% Run moving front --- projection
+projectionforcings_ready = false;
+for i = 0:length(friction_end_members)-1 %%{{{
+   ensembleID = sprintf('%1s9%02d', ensembleGroup, i);
+
+   sigma_max = sigma_max_end_members(i+1);
+
+   fprintf('\n');
+   fprintf([green_text_start 'Running projection for ensembleID: ' ensembleID green_text_end '\n']);
+
+   runme_movingfront_proj;
+end
+%%}}}
+% Load movingfront --- projection %%{{{
+fprintf('\n');
+s = input('Ready to load projection simulations (y/n)? ', 's');
+if strcmpi(s,'n')
+   fprintf('\n');
+   return
+end
+
+for i = 0:length(friction_end_members)-1
+   ensembleID = sprintf('%1s9%02d', ensembleGroup, i);
+   fprintf('\n');
+   fprintf([green_text_start 'Loading projection for ensembleID: ' ensembleID green_text_end '\n']);
+
+   runme_movingfront_proj_loadresultsfromcluster;
 end
 %%}}}
 return
