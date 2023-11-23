@@ -7,6 +7,13 @@ ensembleIDs = {};
 for i = 0:8
    ensembleIDs{i+1} = sprintf('A9%02.0f', i);
 end
+colors = cbrewer('qual', 'Dark2', numel(ensembleIDs));
+%styles = {'-', '--'};
+ensembleIDs = {};
+for i = 1:25
+   ensembleIDs{i} = sprintf('A%03.0f', i);
+end
+colors = repmat([211, 211, 211]/255, numel(ensembleIDs), 1);
 
 mds = struct();
 for i = 1:numel(ensembleIDs)
@@ -41,8 +48,6 @@ for i = 1:numel(ensembleIDs)
    mds(i).proj.IceVolumeAboveFloatation = [md.results.TransientSolution(:).IceVolumeAboveFloatation];
    
 end
-colors = cbrewer('qual', 'Dark2', numel(mds));
-styles = {'-', '--'};
 % Plot mass change
 %plot_mass_change(mds, ensembleIDs, false);
 plot_mass_change(mds, ensembleIDs, colors, false, true);
