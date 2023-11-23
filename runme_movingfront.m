@@ -131,8 +131,8 @@ md.verbose = verbose('solution', true);
 md.transient.requested_outputs = {'default', 'IceVolumeAboveFloatation', 'CalvingFluxLevelset', 'SigmaVM', 'CalvingMeltingrate', 'CalvingCalvingrate', 'SmbMassBalance', 'TotalSmb'}; %, 'CalvingAblationrate'};
 
 % Start and end times
-md.timestepping.start_time = evalin('base','start_time');
-md.timestepping.final_time = evalin('base','final_time');
+md.timestepping.start_time = evalin('base','start_time_hist');
+md.timestepping.final_time = evalin('base','final_time_hist');
 md.timestepping.time_step = 0.01;
 md.settings.output_frequency = 20;
 
